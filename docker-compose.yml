@@ -1,0 +1,43 @@
+services:
+  postgres_db:
+    container_name: postgres-gis-orders
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+    networks:
+      - gis-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gis-orders-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-gis-orders:5432/${POSTGRES_DB}
+    depends_on:
+      - postgres_db
+    env_file:
+      - ./.env
+    networks:
+      - gis-network
+    volumes:
+      - ./backend:/app
+
+volumes:
+  postgres_data:
+
+networks:
+  gis-network:
+    driver: bridge
