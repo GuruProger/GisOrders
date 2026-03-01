@@ -7,10 +7,17 @@ dependencies = [
     "asyncpg==0.30.0",
     "dotenv==0.9.9",
     "fastapi==0.117.0",
+    "geoalchemy2>=0.18.1",
     "passlib==1.7.4",
     "pydantic[email]==2.12.0a1",
     "python-jose==3.5.0",
     "python-multipart==0.0.20",
+    "shapely>=2.1.2",
     "sqlalchemy==2.0.43",
     "uvicorn==0.37.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "gisorders",
 ]

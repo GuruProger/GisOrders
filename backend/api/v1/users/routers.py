@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from typing import Annotated, Optional
+from typing import Annotated
 import datetime
 
 from core.database import db_helper
@@ -35,7 +35,7 @@ async def register(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
 		)
-	except IntegrityError as e:
+	except IntegrityError:
 		await session.rollback()
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
@@ -47,44 +47,24 @@ async def register(
 	"/login",
 	response_model=Token,
 	summary="Вход в систему",
-	description="Аутентификация пользователя и получение JWT токена"
+	description="Аутентификация пользователя через форму или JSON"
 )
 async def login(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
-		form_data: OAuth2PasswordRequestForm = Depends(),
+		form_data: OAuth2PasswordRequestForm = Depends(OAuth2PasswordRequestForm),
+		login_data: LoginRequest = None,
 ):
-	user = await UserService.authenticate_user(session, form_data.username, form_data.password)
-	if not user:
-		raise HTTPException(
-			status_code=status.HTTP_401_UNAUTHORIZED,
-			detail="Неверный email или пароль",
-			headers={"WWW-Authenticate": "Bearer"},
-		)
+	# Определяем email и password в зависимости от типа запроса
+	if login_data:
+		# JSON запрос
+		email = str(login_data.email)
+		password = login_data.password
+	else:
+		# FormData запрос
+		email = form_data.username  # OAuth2PasswordRequestForm использует username для email
+		password = form_data.password
 	
-	access_token_expires = datetime.timedelta(minutes=30)
-	access_token = create_access_token(
-		data={"sub": user.email, "user_id": user.id},
-		expires_delta=access_token_expires
-	)
-	
-	return {
-		"access_token": access_token,
-		"token_type": "bearer",
-		"user": user
-	}
-
-
-@router.post(
-	"/login-json",
-	response_model=Token,
-	summary="Вход в систему (JSON)",
-	description="Альтернативный вход через JSON body"
-)
-async def login_with_json(
-		login_data: LoginRequest,
-		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
-):
-	user = await UserService.authenticate_user(session, login_data.email, login_data.password)
+	user = await UserService.authenticate_user(session, email, password)
 	if not user:
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
@@ -144,7 +124,7 @@ async def update_current_user(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
 		)
-	except IntegrityError as e:
+	except IntegrityError:
 		await session.rollback()
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
@@ -170,11 +150,12 @@ async def delete_current_user(
 			detail=str(e)
 		)
 
+
 @router.delete(
 	"/{user_id}",
 	status_code=status.HTTP_204_NO_CONTENT,
 	summary="Удаление пользователя",
-	description="Удаление пользователя по идентификатору (только для администраторов)"
+	description="Удаление пользователя по идентификатору (только для админов)"
 )
 async def delete_user(
 		user_id: int,
@@ -202,8 +183,6 @@ async def delete_user(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail=str(e)
 		)
-
-
 
 
 @router.get(

@@ -1,3 +1,4 @@
+import json
 import re
 from typing import AsyncGenerator
 
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 	async_sessionmaker,
 	AsyncSession,
 )
+from geoalchemy2 import Geography, Geometry
 
 from core.config import settings
 
@@ -17,6 +19,11 @@ class Base(DeclarativeBase):
 	"""Базовый класс для всех моделей базы данных"""
 	
 	__abstract__ = True  # Этот класс не будет создавать таблицу в базе данных
+	
+	type_annotation_map = {
+		Geography: Geography,
+		Geometry: Geometry,
+	}
 	
 	metadata = MetaData(
 		naming_convention=settings.db_naming_convention,
@@ -49,6 +56,7 @@ class DatabaseHelper:
 			echo_pool=echo_pool,
 			max_overflow=max_overflow,
 			pool_size=pool_size,
+			json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False),
 		)
 		self.session_factory = async_sessionmaker(
 			bind=self.engine,
@@ -79,3 +87,4 @@ db_helper = DatabaseHelper(
 
 # Импортируем все модели здесь (иначе алембик не будет видеть модели)
 from api.v1.users.models import User
+from api.v1.orders.models import Order, OrderProposal, OrderStatus
