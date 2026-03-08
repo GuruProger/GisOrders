@@ -76,8 +76,18 @@ class OrderUpdate(BaseModel):
 		return v
 
 
-class OrderResponse(OrderBase):
+class OrderResponse(BaseModel):
 	id: int
+	title: str
+	description: str
+	min_price: Optional[float]
+	max_price: Optional[float]
+	deadline: datetime
+	address: str
+	tree_type: str
+	tree_height: float
+	tree_diameter: float
+	photos: Optional[List[str]]
 	status: OrderStatus
 	created_at: datetime
 	customer_id: int
