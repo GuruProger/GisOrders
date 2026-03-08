@@ -73,9 +73,9 @@ async def get_my_orders(
 async def get_available_orders(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
-		radius_km: Optional[int] = Query(None, ge=1, le=50, description="Радиус поиска в км"),
-		user_lat: Optional[float] = Query(None, ge=-90, le=90, description="Широта пользователя"),
-		user_lon: Optional[float] = Query(None, ge=-180, le=180, description="Долгота пользователя"),
+		radius_km: Optional[int] = Query(10, ge=1, le=50, description="Радиус поиска в км"),
+		user_lat: float = Query(..., ge=-90, le=90, description="Широта пользователя"),
+		user_lon: float = Query(..., ge=-180, le=180, description="Долгота пользователя"),
 		min_price: Optional[float] = Query(None, ge=0, description="Минимальная цена"),
 		max_price: Optional[float] = Query(None, ge=0, description="Максимальная цена"),
 		tree_type: Optional[str] = Query(None, description="Тип дерева"),
@@ -86,6 +86,7 @@ async def get_available_orders(
 		                     regex="^(created_at|deadline|min_price)$"),
 		sort_order: str = Query("desc", description="Порядок сортировки", regex="^(asc|desc)$")
 ):
+	# Координаты пользователя обязательны для ввода
 	try:
 		filters = OrderFilters(
 			radius_km=radius_km,

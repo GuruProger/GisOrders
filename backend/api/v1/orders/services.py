@@ -89,9 +89,6 @@ class OrderService:
 					filters.radius_km * 1000,  # Радиус в метрах
 				)
 			)
-		else:
-			# Если нет координат для фильтрации - выводим все заказы без гео-фильтра
-			pass
 		
 		# Фильтрация по цене
 		if filters.min_price:

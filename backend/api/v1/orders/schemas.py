@@ -124,9 +124,9 @@ class OrderProposalWithOrderResponse(OrderProposalResponse):
 
 # Схемы для фильтров
 class OrderFilters(BaseModel):
-	radius_km: Optional[int] = Field(None, gt=0, le=50)
-	user_lat: Optional[float] = Field(None, ge=-90, le=90)
-	user_lon: Optional[float] = Field(None, ge=-180, le=180)
+	radius_km: int = Field(10, gt=0, le=50)
+	user_lat: float = Field(..., ge=-90, le=90)
+	user_lon: float = Field(..., ge=-180, le=180)
 	min_price: Optional[float] = Field(None, ge=0)
 	max_price: Optional[float] = Field(None, ge=0)
 	tree_type: Optional[str] = None
