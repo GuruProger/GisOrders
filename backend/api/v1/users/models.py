@@ -21,11 +21,13 @@ class User(Base):
 	orders_as_customer: Mapped[List["Order"]] = relationship(
 		"Order",
 		foreign_keys="Order.customer_id",
-		back_populates="customer"
+		back_populates="customer",
+		cascade="all, delete-orphan"
 	)
 	
 	# Связи с OrderProposal
 	order_proposals: Mapped[List["OrderProposal"]] = relationship(
 		"OrderProposal",
-		back_populates="executor"
+		back_populates="executor",
+		cascade="all, delete-orphan"
 	)

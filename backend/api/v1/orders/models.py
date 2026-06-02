@@ -1,7 +1,7 @@
 from typing import List, TYPE_CHECKING, Optional
 from geoalchemy2 import Geometry
-from geoalchemy2.shape import to_shape  # Добавь этот импорт
-from sqlalchemy import String, Text, DateTime, Float, Integer, Boolean, Enum as SQLEnum, ForeignKey, func
+from geoalchemy2.shape import to_shape
+from sqlalchemy import String, Text, DateTime, Float, Integer, Enum as SQLEnum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from datetime import datetime
@@ -33,7 +33,6 @@ class Order(Base):
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
 		default=datetime.now,
-		server_default=func.now(),
 		nullable=False,
 	)
 	deadline: Mapped[datetime] = mapped_column(DateTime)  # Срок выполнения
@@ -102,7 +101,6 @@ class OrderProposal(Base):
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
 		default=datetime.now,
-		server_default=func.now(),
 		nullable=False,
 	)
 	
