@@ -11,6 +11,7 @@ from core.database import Base
 
 if TYPE_CHECKING:
 	from ..users.models import User
+	from ..chat.models import Chat
 
 
 class OrderStatus(str, Enum):
@@ -56,6 +57,7 @@ class Order(Base):
 	customer: Mapped["User"] = relationship("User", foreign_keys=[customer_id], back_populates="orders_as_customer")
 	proposals: Mapped[List["OrderProposal"]] = relationship("OrderProposal", back_populates="order",
 	                                                        cascade="all, delete-orphan")
+	chats: Mapped[List["Chat"]] = relationship("Chat", back_populates="order", cascade="all, delete-orphan")
 	
 	# Свойства для доступа к координатам
 	@property
@@ -111,3 +113,4 @@ class OrderProposal(Base):
 	# Связи
 	order: Mapped["Order"] = relationship("Order", back_populates="proposals")
 	executor: Mapped["User"] = relationship("User", back_populates="order_proposals")
+	chat: Mapped["Chat"] = relationship("Chat", back_populates="proposal")

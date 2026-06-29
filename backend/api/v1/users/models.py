@@ -7,6 +7,7 @@ from core.database import Base
 
 if TYPE_CHECKING:
 	from ..orders.models import Order, OrderProposal
+	from ..chat.models import Chat, Message
 
 
 class User(Base):
@@ -29,5 +30,26 @@ class User(Base):
 	order_proposals: Mapped[List["OrderProposal"]] = relationship(
 		"OrderProposal",
 		back_populates="executor",
+		cascade="all, delete-orphan"
+	)
+
+	# Связи с Chat
+	chats_as_customer: Mapped[List["Chat"]] = relationship(
+		"Chat",
+		foreign_keys="Chat.customer_id",
+		back_populates="customer",
+		cascade="all, delete-orphan"
+	)
+	chats_as_executor: Mapped[List["Chat"]] = relationship(
+		"Chat",
+		foreign_keys="Chat.executor_id",
+		back_populates="executor",
+		cascade="all, delete-orphan"
+	)
+
+	# Связи с Message
+	sent_messages: Mapped[List["Message"]] = relationship(
+		"Message",
+		back_populates="sender",
 		cascade="all, delete-orphan"
 	)
