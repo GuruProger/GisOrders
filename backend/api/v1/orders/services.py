@@ -268,8 +268,32 @@ class OrderProposalService:
 			order_id=order_id,
 			executor_id=executor_id
 		)
-		
+
 		session.add(proposal)
+		await session.flush()  # Получаем ID предложения
+
+		# Создаем чат между заказчиком и исполнителем
+		from ..chat.models import Chat, Message
+		chat = Chat(
+			order_id=order_id,
+			customer_id=order.customer_id,
+			executor_id=executor_id,
+			proposal_id=proposal.id,
+			is_active=True
+		)
+		session.add(chat)
+		await session.flush()  # Получаем ID чата
+
+		# Если есть сообщение в предложении, добавляем его как первое сообщение в чат
+		if proposal_data.message:
+			first_message = Message(
+				text=proposal_data.message,
+				chat_id=chat.id,
+				sender_id=executor_id,
+				is_read=False
+			)
+			session.add(first_message)
+
 		try:
 			await session.commit()
 			await session.refresh(proposal)
