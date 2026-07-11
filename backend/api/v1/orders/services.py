@@ -1,14 +1,17 @@
 from geoalchemy2 import Geography
-from sqlalchemy import select, and_, or_, Row, RowMapping
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from geoalchemy2.functions import ST_DWithin, ST_Point, ST_SetSRID
 from geoalchemy2.elements import WKTElement
 
+from core.config import settings
 from .models import Order, OrderProposal, OrderStatus
 from .schemas import OrderCreate, OrderUpdate, OrderProposalCreate, OrderProposalUpdate, OrderFilters
 from typing import Optional, Sequence
+from datetime import datetime, timedelta
+
 
 
 class OrderService:
@@ -262,16 +265,34 @@ class OrderProposalService:
 		if existing_result.scalar_one_or_none():
 			raise ValueError("Вы уже отправили предложение к этому заказу")
 		
+		# Проверяем лимит откликов за день
+		day_ago = datetime.now() - timedelta(days=1)
+		daily_count_stmt = select(func.count(OrderProposal.id)).where(
+			and_(
+				OrderProposal.executor_id == executor_id,
+				OrderProposal.created_at >= day_ago
+			)
+		)
+		daily_count_result = await session.execute(daily_count_stmt)
+		daily_count = daily_count_result.scalar()
+		
+		if daily_count >= settings.max_chats_per_day:
+			raise ValueError(
+				f"Превышен лимит откликов за день. "
+				f"Максимум {settings.max_chats_per_day} откликов в сутки"
+			)
+		
+		# Создаем отклик
 		proposal = OrderProposal(
 			proposed_price=proposal_data.proposed_price,
 			message=proposal_data.message,
 			order_id=order_id,
 			executor_id=executor_id
 		)
-
+		
 		session.add(proposal)
 		await session.flush()  # Получаем ID предложения
-
+		
 		# Создаем чат между заказчиком и исполнителем
 		from ..chat.models import Chat, Message
 		chat = Chat(
@@ -283,7 +304,7 @@ class OrderProposalService:
 		)
 		session.add(chat)
 		await session.flush()  # Получаем ID чата
-
+		
 		# Если есть сообщение в предложении, добавляем его как первое сообщение в чат
 		if proposal_data.message:
 			first_message = Message(
@@ -293,7 +314,7 @@ class OrderProposalService:
 				is_read=False
 			)
 			session.add(first_message)
-
+		
 		try:
 			await session.commit()
 			await session.refresh(proposal)

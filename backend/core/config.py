@@ -44,6 +44,8 @@ class Settings(BaseModel):
 	ALGORITHM: str = "HS256"
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 	
+	max_chats_per_day: int = 3
+	
 	cors_origins: list[str] = [
 		"http://localhost:3000",
 		"http://127.0.0.1:3000"
