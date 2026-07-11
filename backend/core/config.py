@@ -20,7 +20,7 @@ if not os.getenv("DB_URL") and not env_path.is_file():
 
 
 class Settings(BaseModel):
-	# Настройки из backend/.env
+	# Настройки из ./.env
 	
 	app_host: str = "0.0.0.0"
 	app_port: int = int(os.getenv("BACKEND_PORT", "8000"))

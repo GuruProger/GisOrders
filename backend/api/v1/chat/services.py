@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, Sequence
 from .models import Chat, Message
 from .schemas import ChatCreate, MessageCreate
+from ..orders.models import OrderProposal
 
 
 class ChatService:
@@ -65,11 +66,26 @@ class ChatService:
 		return result.scalars().all()
 	
 	@staticmethod
-	async def close_chat(session: AsyncSession, chat_id: int) -> Chat:
-		"""Закрытие чата"""
+	async def close_chat(session: AsyncSession, chat_id: int, user_id: int) -> Chat:
+		"""Закрытие чата. Доступно только участникам чата."""
 		chat = await ChatService.get_chat_by_id(session, chat_id)
 		if not chat:
 			raise ValueError("Чат не найден")
+		
+		# Проверяем, что пользователь является участником чата
+		if chat.customer_id != user_id and chat.executor_id != user_id:
+			raise ValueError("Недостаточно прав для закрытия чата")
+		
+		if not chat.is_active:
+			raise ValueError("Чат уже закрыт")
+		
+		# Если чат связан с откликом, удаляем этот отклик
+		if chat.proposal_id:
+			stmt = select(OrderProposal).where(OrderProposal.id == chat.proposal_id)
+			result = await session.execute(stmt)
+			proposal = result.scalar_one_or_none()
+			if proposal:
+				await session.delete(proposal)
 		
 		chat.is_active = False
 		await session.commit()

@@ -395,7 +395,10 @@ class OrderProposalService:
 			user_id: int,
 			is_admin: bool = False
 	) -> None:
-		stmt = select(OrderProposal).where(OrderProposal.id == proposal_id)
+		# Добавляем selectinload для связи chat, чтобы не делать лишний запрос
+		stmt = select(OrderProposal).where(OrderProposal.id == proposal_id).options(
+			selectinload(OrderProposal.chat)
+		)
 		result = await session.execute(stmt)
 		proposal = result.scalar_one_or_none()
 		
@@ -405,6 +408,10 @@ class OrderProposalService:
 		# Проверяем права: либо автор предложения, либо администратор
 		if proposal.executor_id != user_id and not is_admin:
 			raise ValueError("Недостаточно прав для удаления предложения")
+		
+		# Закрываем связанный чат, если он существует и активен
+		if proposal.chat and proposal.chat.is_active:
+			proposal.chat.is_active = False
 		
 		await session.delete(proposal)
 		await session.commit()

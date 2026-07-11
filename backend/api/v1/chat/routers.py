@@ -187,3 +187,44 @@ async def get_unread_count(
 ):
 	count = await MessageService.get_total_unread_count(session, current_user.id)
 	return {"unread_count": count}
+
+
+@router.post(
+	"/{chat_id}/close",
+	response_model=ChatResponse,
+	summary="Закрыть чат",
+	description="Закрытие чата. Доступно только участникам чата. При закрытии чата связанный отклик автоматически отменяется."
+)
+async def close_chat(
+		chat_id: int,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	try:
+		chat = await ChatService.close_chat(session, chat_id, current_user.id)
+		
+		# Формируем ответ
+		last_message = None
+		if chat.messages:
+			last_msg = max(chat.messages, key=lambda m: m.created_at)
+			last_message = last_msg.text
+		
+		unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
+		
+		return ChatResponse(
+			id=chat.id,
+			order_id=chat.order_id,
+			customer_id=chat.customer_id,
+			executor_id=chat.executor_id,
+			proposal_id=chat.proposal_id,
+			is_active=chat.is_active,
+			created_at=chat.created_at,
+			updated_at=chat.updated_at,
+			last_message=last_message,
+			unread_count=unread_count
+		)
+	except ValueError as e:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=str(e)
+		)
