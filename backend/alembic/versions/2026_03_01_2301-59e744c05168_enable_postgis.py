@@ -24,5 +24,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Отключаем расширение (осторожно - удалит все геоданные!)
-    op.execute('DROP EXTENSION IF EXISTS postgis')
+    op.execute('DROP EXTENSION IF EXISTS postgis CASCADE')

@@ -4,21 +4,19 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel, PostgresDsn, Field
 
-# Load environment variables from the .env file located in the backend directory
-BASE_DIR = Path(__file__).resolve().parent.parent
-env_path = BASE_DIR / ".env"
-if not env_path.is_file():  # `.env` is not exists
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+env_path = PROJECT_ROOT / ".env"
+
+if env_path.is_file():
+	load_dotenv(env_path)
+	
+
+# .env файла нет, падаем с ошибкой
+if not os.getenv("DB_URL") and not env_path.is_file():
 	raise FileNotFoundError(
 		f"Critical Error: .env file not found at {env_path}\n"
-		"Please create it or check the path."
 	)
-if env_path.stat().st_size == 0:  # env is empty
-	raise ValueError(
-		f"Critical Error: .env file is empty at {env_path}\n"
-		"Please fill it with required environment variables."
-	)
-
-load_dotenv(env_path)
 
 
 class Settings(BaseModel):
@@ -45,6 +43,11 @@ class Settings(BaseModel):
 	SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")
 	ALGORITHM: str = "HS256"
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+	
+	cors_origins: list[str] = [
+		"http://localhost:3000",
+		"http://127.0.0.1:3000"
+	]
 	
 	class Config:
 		env_file = ".env"
