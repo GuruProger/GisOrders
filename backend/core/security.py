@@ -9,7 +9,7 @@ from api.v1.users.services import UserService
 from api.v1.users.models import User
 from core.config import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/users/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/users/login")
 
 
 async def get_current_user(
