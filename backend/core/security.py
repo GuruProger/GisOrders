@@ -23,7 +23,7 @@ async def get_current_user(
 	)
 	
 	try:
-		payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+		payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 		user_id: int = payload.get("user_id")
 		email: str = payload.get("sub")
 		

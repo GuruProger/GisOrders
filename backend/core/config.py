@@ -1,60 +1,61 @@
-import os
 from pathlib import Path
+from functools import lru_cache
 
-from dotenv import load_dotenv
-from pydantic import BaseModel, PostgresDsn, Field
+from pydantic import Field, PostgresDsn
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-env_path = PROJECT_ROOT / ".env"
 
-if env_path.is_file():
-	load_dotenv(env_path)
+class Settings(BaseSettings):
+	# Сервер
+	app_host: str = Field(default="0.0.0.0", alias="BACKEND_HOST")
+	app_port: int = Field(default=8000, alias="BACKEND_PORT")
 	
-
-# .env файла нет, падаем с ошибкой
-if not os.getenv("DB_URL") and not env_path.is_file():
-	raise FileNotFoundError(
-		f"Critical Error: .env file not found at {env_path}\n"
-	)
-
-
-class Settings(BaseModel):
-	# Настройки из ./.env
-	
-	app_host: str = "0.0.0.0"
-	app_port: int = int(os.getenv("BACKEND_PORT", "8000"))
-	
-	db_url: PostgresDsn = os.getenv("DB_URL")
+	# База данных
+	db_url: PostgresDsn = Field(alias="DB_URL")
 	db_echo: bool = False
 	db_echo_pool: bool = False
 	db_max_overflow: int = 20
 	db_pool_size: int = 10
-	db_naming_convention: dict[str, str] = (
-		{  # Шаблоны для миграций алембика
+	
+	# JWT
+	jwt_secret_key: str = Field(alias="JWT_SECRET_KEY")
+	jwt_algorithm: str = "HS256"
+	access_token_expire_minutes: int = 30
+	
+	# Бизнес-логика
+	max_chats_per_day: int = 3
+	
+	# CORS
+	cors_origins: list[str] = [
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+		"*"
+	]
+	
+	# Настройки чтения переменных окружения
+	model_config = SettingsConfigDict(
+		env_file=PROJECT_ROOT / ".env",
+		env_file_encoding="utf-8",
+		case_sensitive=False,
+		extra="ignore",
+	)
+	
+	@property
+	def db_naming_convention(self) -> dict[str, str]:
+		return {
 			"ix": "ix_%(column_0_label)s",
 			"uq": "uq_%(table_name)s_%(column_0_N_name)s",
 			"ck": "ck_%(table_name)s_%(constraint_name)s",
 			"fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
 			"pk": "pk_%(table_name)s",
 		}
-	)
-	
-	SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")
-	ALGORITHM: str = "HS256"
-	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-	
-	max_chats_per_day: int = 3
-	
-	cors_origins: list[str] = [
-		"http://localhost:3000",
-		"http://127.0.0.1:3000"
-	]
-	
-	class Config:
-		env_file = ".env"
-		env_file_encoding = "utf-8"
-		case_sensitive = False
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+	return Settings()
+
+
+settings = get_settings()
