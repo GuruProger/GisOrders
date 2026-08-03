@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -86,6 +86,12 @@ class ChatService:
 			proposal = result.scalar_one_or_none()
 			if proposal:
 				await session.delete(proposal)
+		
+		# Помечаем все непрочитанные сообщения в прочитанными
+		stmt_update = update(Message).where(
+			and_(Message.chat_id == chat_id, Message.is_read == False)
+		).values(is_read=True)
+		await session.execute(stmt_update)
 		
 		chat.is_active = False
 		await session.commit()
