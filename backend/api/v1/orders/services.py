@@ -13,7 +13,6 @@ from typing import Optional, Sequence
 from datetime import datetime, timedelta
 
 
-
 class OrderService:
 	@staticmethod
 	async def create_order(session: AsyncSession, order_data: OrderCreate, customer_id: int) -> Order:
@@ -68,6 +67,9 @@ class OrderService:
 	) -> Sequence[Order]:
 		# Базовый запрос - только OPEN заказы
 		stmt = select(Order).where(Order.status == OrderStatus.OPEN)
+		
+		# Исключаем заказы, у которых дедлайн уже прошел
+		stmt = stmt.where(Order.deadline >= datetime.now())
 		
 		# Исключить собственные заказы
 		stmt = stmt.where(Order.customer_id != executor_id)
