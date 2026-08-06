@@ -76,6 +76,13 @@ class UserResponse(UserBase):
 	model_config = ConfigDict(from_attributes=True)  # Заменяет class Config в Pydantic v2
 
 
+class UserPublicResponse(BaseModel):
+	id: int
+	username: str
+	
+	model_config = ConfigDict(from_attributes=True)  # Заменяет class Config в Pydantic v2
+
+
 class LoginRequest(BaseModel):
 	email: EmailStr
 	password: str

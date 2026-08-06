@@ -10,7 +10,7 @@ from core.security import get_current_user, get_current_active_user
 from core.auth import create_access_token
 from .models import User
 from .schemas import (
-	UserCreate, UserResponse, Token, LoginRequest, UserUpdate
+	UserCreate, UserResponse, UserPublicResponse, Token, LoginRequest, UserUpdate
 )
 from .services import UserService
 from core.config import settings
@@ -188,7 +188,6 @@ async def delete_user(
 
 @router.get(
 	"/{user_id}",
-	response_model=UserResponse,
 	summary="Получение пользователя по ID",
 	description="Получение информации о пользователе по его идентификатору"
 )
@@ -203,4 +202,11 @@ async def get_user_by_id(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="Пользователь не найден"
 		)
+	
+	# Сам пользователь или админ могут посмотреть данные UserResponse
+	if current_user.id == user.id or current_user.is_admin:
+		return UserResponse.model_validate(user)
+	
+	# Посторонние получают ограниченную информацию о пользователе
+	return UserPublicResponse.model_validate(user)
 	return user
