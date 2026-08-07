@@ -44,28 +44,9 @@ async def register(
 		)
 
 
-@router.post(
-	"/login",
-	response_model=Token,
-	summary="Вход в систему",
-	description="Аутентификация пользователя через форму или JSON"
-)
-async def login(
-		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
-		form_data: OAuth2PasswordRequestForm = Depends(OAuth2PasswordRequestForm),
-		login_data: LoginRequest = None,
-):
-	# Определяем email и password в зависимости от типа запроса
-	if login_data:
-		# JSON запрос
-		email = str(login_data.email)
-		password = login_data.password
-	else:
-		# FormData запрос
-		email = form_data.username  # OAuth2PasswordRequestForm использует username для email
-		password = form_data.password
-	
+async def _create_login_response(session: AsyncSession, email: str, password: str):
 	user = await UserService.authenticate_user(session, email, password)
+	
 	if not user:
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
@@ -75,7 +56,7 @@ async def login(
 	
 	access_token_expires = datetime.timedelta(minutes=settings.access_token_expire_minutes)
 	access_token = create_access_token(
-		data={"sub": user.email, "user_id": user.id},
+		data={"sub": str(user.id), "user_id": user.id},  # Лучше использовать ID, а не email
 		expires_delta=access_token_expires
 	)
 	
@@ -84,6 +65,38 @@ async def login(
 		"token_type": "bearer",
 		"user": user
 	}
+
+
+@router.post(
+	"/login",
+	response_model=Token,
+	summary="Вход через форму (OAuth2)",
+	description="Стандартный вход для Swagger и OAuth2 клиентов"
+)
+async def login_form(
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		form_data: OAuth2PasswordRequestForm = Depends(),
+):
+	"""
+	Принимает данные как form-data (username/password).
+	"""
+	return await _create_login_response(session, form_data.username, form_data.password)
+
+
+@router.post(
+	"/login/json",
+	response_model=Token,
+	summary="Вход через JSON",
+	description="Вход для клиентов, отправляющих JSON"
+)
+async def login_json(
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		login_data: LoginRequest,
+):
+	"""
+	Принимает данные как JSON объект.
+	"""
+	return await _create_login_response(session, str(login_data.email), login_data.password)
 
 
 @router.get(
