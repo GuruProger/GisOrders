@@ -154,12 +154,6 @@ async def update_order(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
 		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Ошибка при обновлении заказа"
-		)
 
 
 @router.post(
@@ -180,12 +174,6 @@ async def close_order(
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
-		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Ошибка при закрытии заказа"
 		)
 
 
@@ -233,12 +221,6 @@ async def create_proposal(
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
-		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Ошибка при создании предложения"
 		)
 
 
@@ -337,12 +319,6 @@ async def update_proposal(
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
-		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Ошибка при обновлении предложения"
 		)
 
 

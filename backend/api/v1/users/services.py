@@ -31,11 +31,10 @@ class UserService:
 		
 		session.add(user)
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(user)
 			return user
 		except IntegrityError as e:
-			await session.rollback()
 			error_msg = str(e.orig)
 			
 			if "ix_user_username" in error_msg:
@@ -111,11 +110,10 @@ class UserService:
 				setattr(user, field, value)
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(user)
 			return user
 		except IntegrityError as e:
-			await session.rollback()
 			error_msg = str(e.orig)
 			
 			if "ix_user_username" in error_msg:
@@ -137,4 +135,4 @@ class UserService:
 			raise ValueError("Пользователь не найден")
 		
 		await session.delete(user)
-		await session.commit()
+		await session.flush()

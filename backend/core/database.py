@@ -71,10 +71,17 @@ class DatabaseHelper:
 	
 	async def session_getter(self) -> AsyncGenerator[AsyncSession, None]:
 		"""
-		Асинхронная выдача сессии базы данных.
+		Асинхронная выдача сессии базы данных
+	    Коммит происходит автоматически после успешной обработки запроса
+        При ошибке - откат транзакции
 		"""
 		async with self.session_factory() as session:
-			yield session
+			try:
+				yield session
+				await session.commit()  # Коммит после успешной обработки
+			except Exception:
+				await session.rollback()  # Откат при ошибке
+				raise
 
 
 db_helper = DatabaseHelper(

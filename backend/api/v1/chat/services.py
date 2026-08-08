@@ -34,11 +34,10 @@ class ChatService:
 		
 		session.add(chat)
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(chat)
 			return chat
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при создании чата")
 	
 	@staticmethod
@@ -94,7 +93,7 @@ class ChatService:
 		await session.execute(stmt_update)
 		
 		chat.is_active = False
-		await session.commit()
+		await session.flush()
 		await session.refresh(chat)
 		return chat
 
@@ -128,11 +127,10 @@ class MessageService:
 		chat.updated_at = func.now()
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(message)
 			return message
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при отправке сообщения")
 	
 	@staticmethod
@@ -180,7 +178,7 @@ class MessageService:
 		for message in messages:
 			message.is_read = True
 		
-		await session.commit()
+		await session.flush()
 		return len(messages)
 	
 	@staticmethod

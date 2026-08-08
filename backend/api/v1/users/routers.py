@@ -36,12 +36,6 @@ async def register(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
 		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Пользователь с такими данными уже существует"
-		)
 
 
 async def _create_login_response(session: AsyncSession, email: str, password: str):
@@ -138,12 +132,7 @@ async def update_current_user(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=str(e)
 		)
-	except IntegrityError:
-		await session.rollback()
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail="Конфликт уникальности данных"
-		)
+
 
 
 @router.delete(

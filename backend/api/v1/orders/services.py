@@ -36,11 +36,10 @@ class OrderService:
 		
 		session.add(order)
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(order)
 			return order
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при создании заказа")
 	
 	@staticmethod
@@ -176,11 +175,10 @@ class OrderService:
 				setattr(order, field, value)
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(order)
 			return order
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при обновлении заказа")
 	
 	@staticmethod
@@ -203,11 +201,10 @@ class OrderService:
 		order.status = OrderStatus.CLOSED
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(order)
 			return order
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при закрытии заказа")
 	
 	@staticmethod
@@ -229,7 +226,7 @@ class OrderService:
 			raise ValueError("Недостаточно прав для удаления заказа")
 		
 		await session.delete(order)
-		await session.commit()
+		await session.flush()
 
 
 class OrderProposalService:
@@ -318,11 +315,10 @@ class OrderProposalService:
 			session.add(first_message)
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(proposal)
 			return proposal
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при создании предложения")
 	
 	@staticmethod
@@ -404,11 +400,10 @@ class OrderProposalService:
 				setattr(proposal, field, value)
 		
 		try:
-			await session.commit()
+			await session.flush()
 			await session.refresh(proposal)
 			return proposal
 		except IntegrityError:
-			await session.rollback()
 			raise ValueError("Ошибка при обновлении предложения")
 	
 	@staticmethod
@@ -437,4 +432,4 @@ class OrderProposalService:
 			proposal.chat.is_active = False
 		
 		await session.delete(proposal)
-		await session.commit()
+		await session.flush()
