@@ -1,3 +1,4 @@
+import logging
 from geoalchemy2 import Geography
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
@@ -5,12 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from geoalchemy2.functions import ST_DWithin, ST_Point, ST_SetSRID
 from geoalchemy2.elements import WKTElement
-
 from core.config import settings
+from core.errors import (
+	NotFoundError, ForbiddenError, ConflictError,
+	BusinessRuleError, ProposalLimitError
+)
 from .models import Order, OrderProposal, OrderStatus
 from .schemas import OrderCreate, OrderUpdate, OrderProposalCreate, OrderProposalUpdate, OrderFilters
 from typing import Optional, Sequence
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 
 class OrderService:
@@ -18,6 +24,7 @@ class OrderService:
 	async def create_order(session: AsyncSession, order_data: OrderCreate, customer_id: int) -> Order:
 		# Создаем гео-объект из координат
 		location = WKTElement(f'POINT({order_data.lon} {order_data.lat})', srid=4326)
+		
 		order = Order(
 			title=order_data.title,
 			description=order_data.description,
@@ -33,14 +40,19 @@ class OrderService:
 			customer_id=customer_id,
 			status=OrderStatus.OPEN
 		)
-		
 		session.add(order)
+		
 		try:
 			await session.flush()
 			await session.refresh(order)
 			return order
-		except IntegrityError:
-			raise ValueError("Ошибка при создании заказа")
+		except IntegrityError as e:
+			logger.error("IntegrityError in create_order", exc_info=e)
+			raise ConflictError(
+				"Не удалось создать заказ",
+				code="order_creation_failed",
+				resource="order",
+			)
 	
 	@staticmethod
 	async def get_orders_by_customer(
@@ -49,12 +61,9 @@ class OrderService:
 			status: Optional[OrderStatus] = None
 	) -> Sequence[Order]:
 		stmt = select(Order).where(Order.customer_id == customer_id)
-		
 		if status:
 			stmt = stmt.where(Order.status == status)
-		
 		stmt = stmt.order_by(Order.created_at.desc())
-		
 		result = await session.execute(stmt)
 		return result.scalars().all()
 	
@@ -83,14 +92,13 @@ class OrderService:
 		if filters.user_lat and filters.user_lon and filters.radius_km:
 			# Создаем точку с правильным SRID 4326
 			user_point = ST_SetSRID(ST_Point(filters.user_lon, filters.user_lat), 4326)
-			
 			# Конвертируем geometry в geography для работы в метрах
 			# И используем радиус в метрах (km * 1000)
 			stmt = stmt.where(
 				ST_DWithin(
-					Order.location.cast(Geography),  # Конвертируем в geography
-					user_point.cast(Geography),  # Конвертируем в geography
-					filters.radius_km * 1000,  # Радиус в метрах
+					Order.location.cast(Geography),
+					user_point.cast(Geography),
+					filters.radius_km * 1000,
 				)
 			)
 		
@@ -137,7 +145,6 @@ class OrderService:
 		
 		result = await session.execute(stmt)
 		orders = result.scalars().all()
-		
 		return orders
 	
 	@staticmethod
@@ -159,15 +166,29 @@ class OrderService:
 		order = result.scalar_one_or_none()
 		
 		if not order:
-			raise ValueError("Заказ не найден")
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что пользователь является владельцем заказа или админом
 		if order.customer_id != customer_id and not is_admin:
-			raise ValueError("Недостаточно прав для редактирования заказа")
+			raise ForbiddenError(
+				"Недостаточно прав для редактирования заказа",
+				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что заказ еще открыт
 		if order.status != OrderStatus.OPEN:
-			raise ValueError("Нельзя редактировать закрытый заказ")
+			raise ConflictError(
+				"Нельзя редактировать закрытый заказ",
+				code="order_closed",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Обновляем только переданные поля
 		for field, value in update_data.items():
@@ -178,8 +199,14 @@ class OrderService:
 			await session.flush()
 			await session.refresh(order)
 			return order
-		except IntegrityError:
-			raise ValueError("Ошибка при обновлении заказа")
+		except IntegrityError as e:
+			logger.error("IntegrityError in update_order", exc_info=e)
+			raise ConflictError(
+				"Не удалось обновить заказ",
+				code="order_update_failed",
+				resource="order",
+				resource_id=order_id,
+			)
 	
 	@staticmethod
 	async def close_order(session: AsyncSession, order_id: int, customer_id: int, is_admin: bool = False) -> Order:
@@ -188,15 +215,29 @@ class OrderService:
 		order = result.scalar_one_or_none()
 		
 		if not order:
-			raise ValueError("Заказ не найден")
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что пользователь является владельцем заказа или админом
 		if order.customer_id != customer_id and not is_admin:
-			raise ValueError("Недостаточно прав для закрытия заказа")
+			raise ForbiddenError(
+				"Недостаточно прав для закрытия заказа",
+				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что заказ еще открыт
 		if order.status != OrderStatus.OPEN:
-			raise ValueError("Заказ уже закрыт")
+			raise ConflictError(
+				"Заказ уже закрыт",
+				code="order_already_closed",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		order.status = OrderStatus.CLOSED
 		
@@ -204,8 +245,14 @@ class OrderService:
 			await session.flush()
 			await session.refresh(order)
 			return order
-		except IntegrityError:
-			raise ValueError("Ошибка при закрытии заказа")
+		except IntegrityError as e:
+			logger.error("IntegrityError in close_order", exc_info=e)
+			raise ConflictError(
+				"Не удалось закрыть заказ",
+				code="order_close_failed",
+				resource="order",
+				resource_id=order_id,
+			)
 	
 	@staticmethod
 	async def delete_order(
@@ -219,11 +266,20 @@ class OrderService:
 		order = result.scalar_one_or_none()
 		
 		if not order:
-			raise ValueError("Заказ не найден")
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем права
 		if order.customer_id != user_id and not is_admin:
-			raise ValueError("Недостаточно прав для удаления заказа")
+			raise ForbiddenError(
+				"Недостаточно прав для удаления заказа",
+				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		await session.delete(order)
 		await session.flush()
@@ -243,15 +299,29 @@ class OrderProposalService:
 		order = result.scalar_one_or_none()
 		
 		if not order:
-			raise ValueError("Заказ не найден")
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что заказ открыт
 		if order.status != OrderStatus.OPEN:
-			raise ValueError("Нельзя отправить предложение к закрытому заказу")
+			raise ConflictError(
+				"Нельзя отправить предложение к закрытому заказу",
+				code="order_closed",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что исполнитель не является владельцем заказа
 		if order.customer_id == executor_id:
-			raise ValueError("Нельзя отправить предложение к собственному заказу")
+			raise BusinessRuleError(
+				"Нельзя отправить предложение к собственному заказу",
+				code="own_order_proposal",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем, что исполнитель еще не отправлял предложение к этому заказу
 		existing_proposal_stmt = select(OrderProposal).where(
@@ -262,7 +332,12 @@ class OrderProposalService:
 		)
 		existing_result = await session.execute(existing_proposal_stmt)
 		if existing_result.scalar_one_or_none():
-			raise ValueError("Вы уже отправили предложение к этому заказу")
+			raise ConflictError(
+				"Вы уже отправили предложение к этому заказу",
+				code="proposal_already_exists",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Проверяем лимит откликов за день
 		day_ago = datetime.now() - timedelta(days=1)
@@ -276,9 +351,10 @@ class OrderProposalService:
 		daily_count = daily_count_result.scalar()
 		
 		if daily_count >= settings.max_chats_per_day:
-			raise ValueError(
-				f"Превышен лимит откликов за день. "
-				f"Максимум {settings.max_chats_per_day} откликов в сутки"
+			raise ProposalLimitError(
+				f"Превышен лимит откликов за день. Максимум {settings.max_chats_per_day} откликов в сутки",
+				code="daily_proposal_limit",
+				resource="proposal",
 			)
 		
 		# Создаем отклик
@@ -288,9 +364,8 @@ class OrderProposalService:
 			order_id=order_id,
 			executor_id=executor_id
 		)
-		
 		session.add(proposal)
-		await session.flush()  # Получаем ID предложения
+		await session.flush()
 		
 		# Создаем чат между заказчиком и исполнителем
 		from ..chat.models import Chat, Message
@@ -302,7 +377,7 @@ class OrderProposalService:
 			is_active=True
 		)
 		session.add(chat)
-		await session.flush()  # Получаем ID чата
+		await session.flush()
 		
 		# Если есть сообщение в предложении, добавляем его как первое сообщение в чат
 		if proposal_data.message:
@@ -318,8 +393,13 @@ class OrderProposalService:
 			await session.flush()
 			await session.refresh(proposal)
 			return proposal
-		except IntegrityError:
-			raise ValueError("Ошибка при создании предложения")
+		except IntegrityError as e:
+			logger.error("IntegrityError in create_proposal", exc_info=e)
+			raise ConflictError(
+				"Не удалось создать предложение",
+				code="proposal_creation_failed",
+				resource="proposal",
+			)
 	
 	@staticmethod
 	async def get_proposals_by_order(
@@ -334,15 +414,23 @@ class OrderProposalService:
 		order = result.scalar_one_or_none()
 		
 		if not order:
-			raise ValueError("Заказ не найден")
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		if order.customer_id != customer_id and not is_admin:
-			raise ValueError("Недостаточно прав для просмотра предложений")
+			raise ForbiddenError(
+				"Недостаточно прав для просмотра предложений",
+				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
 		
 		# Получаем предложения к заказу
 		stmt = select(OrderProposal).where(OrderProposal.order_id == order_id)
 		stmt = stmt.order_by(OrderProposal.created_at.desc())
-		
 		result = await session.execute(stmt)
 		return result.scalars().all()
 	
@@ -357,7 +445,6 @@ class OrderProposalService:
 			.options(selectinload(OrderProposal.order))
 			.order_by(OrderProposal.created_at.desc())
 		)
-		
 		result = await session.execute(stmt)
 		return result.scalars().all()
 	
@@ -384,15 +471,29 @@ class OrderProposalService:
 		proposal = result.scalar_one_or_none()
 		
 		if not proposal:
-			raise ValueError("Предложение не найдено")
+			raise NotFoundError(
+				"Предложение не найдено",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
 		
 		# Проверяем, что пользователь является автором предложения или админом
 		if proposal.executor_id != executor_id and not is_admin:
-			raise ValueError("Недостаточно прав для редактирования предложения")
+			raise ForbiddenError(
+				"Недостаточно прав для редактирования предложения",
+				code="proposal_access_denied",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
 		
 		# Проверяем, что заказ еще открыт
 		if proposal.order.status != OrderStatus.OPEN:
-			raise ValueError("Нельзя редактировать предложение к закрытому заказу")
+			raise ConflictError(
+				"Нельзя редактировать предложение к закрытому заказу",
+				code="order_closed",
+				resource="order",
+				resource_id=proposal.order_id,
+			)
 		
 		# Обновляем только переданные поля
 		for field, value in update_data.items():
@@ -403,8 +504,14 @@ class OrderProposalService:
 			await session.flush()
 			await session.refresh(proposal)
 			return proposal
-		except IntegrityError:
-			raise ValueError("Ошибка при обновлении предложения")
+		except IntegrityError as e:
+			logger.error("IntegrityError in update_proposal", exc_info=e)
+			raise ConflictError(
+				"Не удалось обновить предложение",
+				code="proposal_update_failed",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
 	
 	@staticmethod
 	async def delete_proposal(
@@ -421,11 +528,20 @@ class OrderProposalService:
 		proposal = result.scalar_one_or_none()
 		
 		if not proposal:
-			raise ValueError("Предложение не найдено")
+			raise NotFoundError(
+				"Предложение не найдено",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
 		
 		# Проверяем права: либо автор предложения, либо администратор
 		if proposal.executor_id != user_id and not is_admin:
-			raise ValueError("Недостаточно прав для удаления предложения")
+			raise ForbiddenError(
+				"Недостаточно прав для удаления предложения",
+				code="proposal_access_denied",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
 		
 		# Закрываем связанный чат, если он существует и активен
 		if proposal.chat and proposal.chat.is_active:

@@ -1,9 +1,13 @@
+import logging
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import User
 from .schemas import UserCreate
 from core.auth import get_password_hash, verify_password
+from core.errors import ConflictError, NotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -13,14 +17,24 @@ class UserService:
 		stmt = select(User).where(User.email == user_data.email)
 		result = await session.execute(stmt)
 		if result.scalar_one_or_none():
-			raise ValueError("Пользователь с таким email уже существует")
+			raise ConflictError(
+				"Пользователь с таким email уже существует",
+				code="email_duplicate",
+				field="email",
+				resource="user",
+			)
 		
 		# Проверяем существующего пользователя по номеру телефона
 		if user_data.phone_number:
 			stmt = select(User).where(User.phone_number == user_data.phone_number)
 			result = await session.execute(stmt)
 			if result.scalar_one_or_none():
-				raise ValueError("Пользователь с таким номером телефона уже существует")
+				raise ConflictError(
+					"Пользователь с таким номером телефона уже существует",
+					code="phone_duplicate",
+					field="phone_number",
+					resource="user",
+				)
 		
 		user = User(
 			email=str(user_data.email),
@@ -35,16 +49,35 @@ class UserService:
 			await session.refresh(user)
 			return user
 		except IntegrityError as e:
-			error_msg = str(e.orig)
-			
-			if "ix_user_username" in error_msg:
-				raise ValueError("Пользователь с таким именем уже существует")
-			elif "ix_user_email" in error_msg:
-				raise ValueError("Пользователь с таким email уже существует")
-			elif "ix_user_phone_number" in error_msg:
-				raise ValueError("Пользователь с таким номером телефона уже существует")
+			error_msg = str(e.orig).lower()
+			if "ix_user_username" in error_msg or "username" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким именем уже существует",
+					code="username_duplicate",
+					field="username",
+					resource="user",
+				)
+			elif "ix_user_email" in error_msg or "email" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким email уже существует",
+					code="email_duplicate",
+					field="email",
+					resource="user",
+				)
+			elif "ix_user_phone_number" in error_msg or "phone" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким номером телефона уже существует",
+					code="phone_duplicate",
+					field="phone_number",
+					resource="user",
+				)
 			else:
-				raise ValueError("Пользователь с такими данными уже существует")
+				logger.error("IntegrityError in create_user", exc_info=e)
+				raise ConflictError(
+					"Пользователь с такими данными уже существует",
+					code="user_duplicate",
+					resource="user",
+				)
 	
 	@staticmethod
 	async def authenticate_user(session: AsyncSession, email: str, password: str) -> User | None:
@@ -81,7 +114,11 @@ class UserService:
 		user = result.scalar_one_or_none()
 		
 		if not user:
-			raise ValueError("Пользователь не найден")
+			raise NotFoundError(
+				"Пользователь не найден",
+				resource="user",
+				resource_id=user_id,
+			)
 		
 		# Проверяем уникальность email, если он обновляется
 		if 'email' in update_data and update_data['email'] != user.email:
@@ -91,7 +128,13 @@ class UserService:
 			)
 			result = await session.execute(stmt)
 			if result.scalar_one_or_none():
-				raise ValueError("Пользователь с таким email уже существует")
+				raise ConflictError(
+					"Пользователь с таким email уже существует",
+					code="email_duplicate",
+					field="email",
+					resource="user",
+					resource_id=user_id,
+				)
 		
 		# Проверяем уникальность номера телефона, если он обновляется
 		if 'phone_number' in update_data and update_data['phone_number'] != user.phone_number:
@@ -102,7 +145,13 @@ class UserService:
 				)
 				result = await session.execute(stmt)
 				if result.scalar_one_or_none():
-					raise ValueError("Этот номер телефона уже используется другим пользователем")
+					raise ConflictError(
+						"Этот номер телефона уже используется другим пользователем",
+						code="phone_duplicate",
+						field="phone_number",
+						resource="user",
+						resource_id=user_id,
+					)
 		
 		# Обновляем только переданные поля
 		for field, value in update_data.items():
@@ -114,16 +163,39 @@ class UserService:
 			await session.refresh(user)
 			return user
 		except IntegrityError as e:
-			error_msg = str(e.orig)
-			
-			if "ix_user_username" in error_msg:
-				raise ValueError("Пользователь с таким именем уже существует")
-			elif "ix_user_email" in error_msg:
-				raise ValueError("Пользователь с таким email уже существует")
-			elif "ix_user_phone_number" in error_msg:
-				raise ValueError("Пользователь с таким номером телефона уже существует")
+			error_msg = str(e.orig).lower()
+			if "ix_user_username" in error_msg or "username" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким именем уже существует",
+					code="username_duplicate",
+					field="username",
+					resource="user",
+					resource_id=user_id,
+				)
+			elif "ix_user_email" in error_msg or "email" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким email уже существует",
+					code="email_duplicate",
+					field="email",
+					resource="user",
+					resource_id=user_id,
+				)
+			elif "ix_user_phone_number" in error_msg or "phone" in error_msg:
+				raise ConflictError(
+					"Пользователь с таким номером телефона уже существует",
+					code="phone_duplicate",
+					field="phone_number",
+					resource="user",
+					resource_id=user_id,
+				)
 			else:
-				raise ValueError("Конфликт уникальности данных")
+				logger.error("IntegrityError in update_user", exc_info=e)
+				raise ConflictError(
+					"Конфликт уникальности данных",
+					code="data_conflict",
+					resource="user",
+					resource_id=user_id,
+				)
 	
 	@staticmethod
 	async def delete_user(session: AsyncSession, user_id: int) -> None:
@@ -132,7 +204,10 @@ class UserService:
 		user = result.scalar_one_or_none()
 		
 		if not user:
-			raise ValueError("Пользователь не найден")
-		
+			raise NotFoundError(
+				"Пользователь не найден",
+				resource="user",
+				resource_id=user_id,
+			)
 		await session.delete(user)
 		await session.flush()

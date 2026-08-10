@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, List
 from core.database import db_helper
 from core.security import get_current_active_user
+from core.errors import NotFoundError, ForbiddenError
 from .models import Chat, Message
 from .schemas import (
 	ChatResponse, ChatCreate, ChatWithMessagesResponse,
@@ -24,41 +25,35 @@ async def get_my_chats(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		chats = await ChatService.get_user_chats(session, current_user.id)
+	chats = await ChatService.get_user_chats(session, current_user.id)
+	
+	# Для каждого чата получаем последнее сообщение и счётчик непрочитанных
+	result = []
+	for chat in chats:
+		# Получаем последнее сообщение
+		last_message = None
+		if chat.messages:
+			last_msg = max(chat.messages, key=lambda m: m.created_at)
+			last_message = last_msg.text
 		
-		# Для каждого чата получаем последнее сообщение и счётчик непрочитанных
-		result = []
-		for chat in chats:
-			# Получаем последнее сообщение
-			last_message = None
-			if chat.messages:
-				last_msg = max(chat.messages, key=lambda m: m.created_at)
-				last_message = last_msg.text
-			
-			# Получаем количество непрочитанных
-			unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
-			
-			chat_dict = ChatResponse(
-				id=chat.id,
-				order_id=chat.order_id,
-				customer_id=chat.customer_id,
-				executor_id=chat.executor_id,
-				proposal_id=chat.proposal_id,
-				is_active=chat.is_active,
-				created_at=chat.created_at,
-				updated_at=chat.updated_at,
-				last_message=last_message,
-				unread_count=unread_count
-			)
-			result.append(chat_dict)
+		# Получаем количество непрочитанных
+		unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
 		
-		return result
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
+		chat_dict = ChatResponse(
+			id=chat.id,
+			order_id=chat.order_id,
+			customer_id=chat.customer_id,
+			executor_id=chat.executor_id,
+			proposal_id=chat.proposal_id,
+			is_active=chat.is_active,
+			created_at=chat.created_at,
+			updated_at=chat.updated_at,
+			last_message=last_message,
+			unread_count=unread_count
 		)
+		result.append(chat_dict)
+	
+	return result
 
 
 @router.get(
@@ -76,16 +71,19 @@ async def get_chat(
 ):
 	chat = await ChatService.get_chat_by_id(session, chat_id)
 	if not chat:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Чат не найден"
+		raise NotFoundError(
+			"Чат не найден",
+			resource="chat",
+			resource_id=chat_id,
 		)
 	
 	# Проверяем, что пользователь является участником чата
 	if chat.customer_id != current_user.id and chat.executor_id != current_user.id:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="Недостаточно прав для просмотра этого чата"
+		raise ForbiddenError(
+			"Недостаточно прав для просмотра этого чата",
+			code="chat_access_denied",
+			resource="chat",
+			resource_id=chat_id,
 		)
 	
 	# Получаем сообщения
@@ -134,26 +132,20 @@ async def send_message(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		message = await MessageService.create_message(
-			session,
-			chat_id,
-			message_data,
-			current_user.id
-		)
-		return MessageResponse(
-			id=message.id,
-			text=message.text,
-			chat_id=message.chat_id,
-			sender_id=message.sender_id,
-			is_read=message.is_read,
-			created_at=message.created_at
-		)
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	message = await MessageService.create_message(
+		session,
+		chat_id,
+		message_data,
+		current_user.id
+	)
+	return MessageResponse(
+		id=message.id,
+		text=message.text,
+		chat_id=message.chat_id,
+		sender_id=message.sender_id,
+		is_read=message.is_read,
+		created_at=message.created_at
+	)
 
 
 @router.post(
@@ -166,14 +158,8 @@ async def mark_as_read(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		count = await MessageService.mark_messages_as_read(session, chat_id, current_user.id)
-		return {"message": f"Отмечено {count} сообщений как прочитанных"}
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	count = await MessageService.mark_messages_as_read(session, chat_id, current_user.id)
+	return {"message": f"Отмечено {count} сообщений как прочитанных"}
 
 
 @router.get(
@@ -200,31 +186,25 @@ async def close_chat(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		chat = await ChatService.close_chat(session, chat_id, current_user.id)
-		
-		# Формируем ответ
-		last_message = None
-		if chat.messages:
-			last_msg = max(chat.messages, key=lambda m: m.created_at)
-			last_message = last_msg.text
-		
-		unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
-		
-		return ChatResponse(
-			id=chat.id,
-			order_id=chat.order_id,
-			customer_id=chat.customer_id,
-			executor_id=chat.executor_id,
-			proposal_id=chat.proposal_id,
-			is_active=chat.is_active,
-			created_at=chat.created_at,
-			updated_at=chat.updated_at,
-			last_message=last_message,
-			unread_count=unread_count
-		)
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	chat = await ChatService.close_chat(session, chat_id, current_user.id)
+	
+	# Формируем ответ
+	last_message = None
+	if chat.messages:
+		last_msg = max(chat.messages, key=lambda m: m.created_at)
+		last_message = last_msg.text
+	
+	unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
+	
+	return ChatResponse(
+		id=chat.id,
+		order_id=chat.order_id,
+		customer_id=chat.customer_id,
+		executor_id=chat.executor_id,
+		proposal_id=chat.proposal_id,
+		is_active=chat.is_active,
+		created_at=chat.created_at,
+		updated_at=chat.updated_at,
+		last_message=last_message,
+		unread_count=unread_count
+	)

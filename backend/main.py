@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from core.database import db_helper
 from core.config import settings
+from core.errors import register_error_handlers
 from api import router as api_router
 
 
@@ -16,6 +17,9 @@ async def lifespan(lifespan_app: FastAPI):
     await db_helper.dispose()  # Закрываем соединение с бд
 
 app = FastAPI(lifespan=lifespan)
+
+register_error_handlers(app)
+
 app.include_router(api_router)
 
 app.add_middleware(

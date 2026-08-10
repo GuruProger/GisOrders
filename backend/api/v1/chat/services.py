@@ -1,3 +1,4 @@
+import logging
 from sqlalchemy import select, func, and_, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +7,9 @@ from typing import Optional, Sequence
 from .models import Chat, Message
 from .schemas import ChatCreate, MessageCreate
 from ..orders.models import OrderProposal
+from core.errors import NotFoundError, ForbiddenError, ConflictError, BusinessRuleError
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -37,14 +41,19 @@ class ChatService:
 			await session.flush()
 			await session.refresh(chat)
 			return chat
-		except IntegrityError:
-			raise ValueError("Ошибка при создании чата")
+		except IntegrityError as e:
+			logger.error("IntegrityError in create_chat", exc_info=e)
+			raise ConflictError(
+				"Не удалось создать чат",
+				code="chat_creation_failed",
+				resource="chat",
+			)
 	
 	@staticmethod
 	async def get_chat_by_id(session: AsyncSession, chat_id: int) -> Optional[Chat]:
 		"""Получение чата по ID"""
 		stmt = select(Chat).where(Chat.id == chat_id).options(
-			selectinload(Chat.messages)  # ← ДОБАВИТЬ ЭТО для eager loading
+			selectinload(Chat.messages)
 		)
 		result = await session.execute(stmt)
 		return result.scalar_one_or_none()
@@ -58,7 +67,7 @@ class ChatService:
 				(Chat.customer_id == user_id) | (Chat.executor_id == user_id)
 			)
 		).options(
-			selectinload(Chat.messages)  # ← ДОБАВИТЬ ЭТО
+			selectinload(Chat.messages)
 		).order_by(desc(Chat.updated_at))
 		
 		result = await session.execute(stmt)
@@ -69,14 +78,28 @@ class ChatService:
 		"""Закрытие чата. Доступно только участникам чата."""
 		chat = await ChatService.get_chat_by_id(session, chat_id)
 		if not chat:
-			raise ValueError("Чат не найден")
+			raise NotFoundError(
+				"Чат не найден",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		# Проверяем, что пользователь является участником чата
 		if chat.customer_id != user_id and chat.executor_id != user_id:
-			raise ValueError("Недостаточно прав для закрытия чата")
+			raise ForbiddenError(
+				"Недостаточно прав для закрытия чата",
+				code="chat_access_denied",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		if not chat.is_active:
-			raise ValueError("Чат уже закрыт")
+			raise ConflictError(
+				"Чат уже закрыт",
+				code="chat_already_closed",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		# Если чат связан с откликом, удаляем этот отклик
 		if chat.proposal_id:
@@ -106,13 +129,27 @@ class MessageService:
 		# Проверяем, существует ли чат и является ли пользователь его участником
 		chat = await ChatService.get_chat_by_id(session, chat_id)
 		if not chat:
-			raise ValueError("Чат не найден")
+			raise NotFoundError(
+				"Чат не найден",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		if chat.customer_id != sender_id and chat.executor_id != sender_id:
-			raise ValueError("Вы не являетесь участником этого чата")
+			raise ForbiddenError(
+				"Вы не являетесь участником этого чата",
+				code="chat_access_denied",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		if not chat.is_active:
-			raise ValueError("Чат закрыт")
+			raise ConflictError(
+				"Нельзя отправлять сообщения в закрытый чат",
+				code="chat_closed",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		message = Message(
 			text=message_data.text,
@@ -130,8 +167,13 @@ class MessageService:
 			await session.flush()
 			await session.refresh(message)
 			return message
-		except IntegrityError:
-			raise ValueError("Ошибка при отправке сообщения")
+		except IntegrityError as e:
+			logger.error("IntegrityError in create_message", exc_info=e)
+			raise ConflictError(
+				"Не удалось отправить сообщение",
+				code="message_creation_failed",
+				resource="message",
+			)
 	
 	@staticmethod
 	async def get_chat_messages(
@@ -157,7 +199,20 @@ class MessageService:
 		"""Пометить все сообщения в чате как прочитанные (кроме своих)"""
 		chat = await ChatService.get_chat_by_id(session, chat_id)
 		if not chat:
-			raise ValueError("Чат не найден")
+			raise NotFoundError(
+				"Чат не найден",
+				resource="chat",
+				resource_id=chat_id,
+			)
+		
+		# Проверяем участие пользователя
+		if chat.customer_id != user_id and chat.executor_id != user_id:
+			raise ForbiddenError(
+				"Недостаточно прав для пометки сообщений",
+				code="chat_access_denied",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		# Определяем ID собеседника
 		other_user_id = chat.executor_id if chat.customer_id == user_id else chat.customer_id
@@ -186,7 +241,20 @@ class MessageService:
 		"""Получить количество непрочитанных сообщений для пользователя"""
 		chat = await ChatService.get_chat_by_id(session, chat_id)
 		if not chat:
-			return 0
+			raise NotFoundError(
+				"Чат не найден",
+				resource="chat",
+				resource_id=chat_id,
+			)
+		
+		# Проверяем участие пользователя
+		if chat.customer_id != user_id and chat.executor_id != user_id:
+			raise ForbiddenError(
+				"Недостаточно прав для просмотра чата",
+				code="chat_access_denied",
+				resource="chat",
+				resource_id=chat_id,
+			)
 		
 		# Определяем ID собеседника
 		other_user_id = chat.executor_id if chat.customer_id == user_id else chat.customer_id

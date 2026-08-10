@@ -1,11 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 from typing import Annotated, Optional
-
 from core.database import db_helper
-from core.security import get_current_user, get_current_active_user
+from core.security import get_current_active_user
+from core.errors import NotFoundError, ForbiddenError
 from .models import Order, OrderProposal, OrderStatus
 from .schemas import (
 	OrderCreate, OrderResponse, OrderUpdate, OrderProposalCreate,
@@ -19,6 +17,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 
 # Эндпоинты для заказов
+
 @router.post(
 	"/",
 	response_model=OrderResponse,
@@ -30,17 +29,7 @@ async def create_order(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		order = await OrderService.create_order(session, order_data, current_user.id)
-		from geoalchemy2.shape import to_shape
-		
-		shape = to_shape(order.location)
-		return order
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderService.create_order(session, order_data, current_user.id)
 
 
 @router.get(
@@ -54,14 +43,7 @@ async def get_my_orders(
 		current_user: Annotated[User, Depends(get_current_active_user)],
 		order_status: Optional[OrderStatus] = Query(None, description="Фильтр по статусу заказа")
 ):
-	try:
-		orders = await OrderService.get_orders_by_customer(session, current_user.id, order_status)
-		return orders
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderService.get_orders_by_customer(session, current_user.id, order_status)
 
 
 @router.get(
@@ -83,32 +65,23 @@ async def get_available_orders(
 		page: int = Query(1, ge=1, description="Номер страницы"),
 		per_page: int = Query(20, ge=1, le=100, description="Количество элементов на странице"),
 		sort_by: str = Query("created_at", description="Поле для сортировки",
-		                     regex="^(created_at|deadline|min_price)$"),
-		sort_order: str = Query("desc", description="Порядок сортировки", regex="^(asc|desc)$")
+		                     pattern="^(created_at|deadline|min_price)$"),
+		sort_order: str = Query("desc", description="Порядок сортировки", pattern="^(asc|desc)$")
 ):
-	# Координаты пользователя обязательны для ввода
-	try:
-		filters = OrderFilters(
-			radius_km=radius_km,
-			user_lat=user_lat,
-			user_lon=user_lon,
-			min_price=min_price,
-			max_price=max_price,
-			tree_type=tree_type,
-			max_height=max_height,
-			page=page,
-			per_page=per_page,
-			sort_by=sort_by,
-			sort_order=sort_order
-		)
-		
-		orders = await OrderService.get_available_orders(session, current_user.id, filters)
-		return orders
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	filters = OrderFilters(
+		radius_km=radius_km,
+		user_lat=user_lat,
+		user_lon=user_lon,
+		min_price=min_price,
+		max_price=max_price,
+		tree_type=tree_type,
+		max_height=max_height,
+		page=page,
+		per_page=per_page,
+		sort_by=sort_by,
+		sort_order=sort_order
+	)
+	return await OrderService.get_available_orders(session, current_user.id, filters)
 
 
 @router.get(
@@ -124,9 +97,10 @@ async def get_order_by_id(
 ):
 	order = await OrderService.get_order_by_id(session, order_id)
 	if not order:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Заказ не найден"
+		raise NotFoundError(
+			"Заказ не найден",
+			resource="order",
+			resource_id=order_id,
 		)
 	return order
 
@@ -143,17 +117,8 @@ async def update_order(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		# Преобразуем Pydantic модель в dict, исключая None значения
-		update_dict = update_data.model_dump(exclude_unset=True)
-		
-		order = await OrderService.update_order(session, order_id, update_dict, current_user.id, current_user.is_admin)
-		return order
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	update_dict = update_data.model_dump(exclude_unset=True)
+	return await OrderService.update_order(session, order_id, update_dict, current_user.id, current_user.is_admin)
 
 
 @router.post(
@@ -167,19 +132,12 @@ async def close_order(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		order = await OrderService.close_order(session, order_id, current_user.id, current_user.is_admin)
-		return order
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderService.close_order(session, order_id, current_user.id, current_user.is_admin)
 
 
 @router.delete(
 	"/{order_id}",
-	status_code=status.HTTP_204_NO_CONTENT,
+	status_code=204,
 	summary="Удаление заказа",
 	description="Удаление заказа (для админа или владельца заказа)"
 )
@@ -188,18 +146,13 @@ async def delete_order(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		await OrderService.delete_order(
-			session, order_id, current_user.id, current_user.is_admin
-		)
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail=str(e)
-		)
+	await OrderService.delete_order(
+		session, order_id, current_user.id, current_user.is_admin
+	)
 
 
 # Эндпоинты для предложений
+
 @router.post(
 	"/{order_id}/proposals",
 	response_model=OrderProposalResponse,
@@ -212,16 +165,9 @@ async def create_proposal(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		proposal = await OrderProposalService.create_proposal(
-			session, proposal_data, order_id, current_user.id
-		)
-		return proposal
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderProposalService.create_proposal(
+		session, proposal_data, order_id, current_user.id
+	)
 
 
 @router.get(
@@ -235,16 +181,9 @@ async def get_order_proposals(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		proposals = await OrderProposalService.get_proposals_by_order(
-			session, order_id, current_user.id, current_user.is_admin
-		)
-		return proposals
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderProposalService.get_proposals_by_order(
+		session, order_id, current_user.id, current_user.is_admin
+	)
 
 
 @router.get(
@@ -257,14 +196,7 @@ async def get_my_proposals(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		proposals = await OrderProposalService.get_proposals_by_executor(session, current_user.id)
-		return proposals
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	return await OrderProposalService.get_proposals_by_executor(session, current_user.id)
 
 
 @router.get(
@@ -280,16 +212,19 @@ async def get_proposal_by_id(
 ):
 	proposal = await OrderProposalService.get_proposal_by_id(session, proposal_id)
 	if not proposal:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Предложение не найдено"
+		raise NotFoundError(
+			"Предложение не найдено",
+			resource="proposal",
+			resource_id=proposal_id,
 		)
 	
 	# Проверяем права доступа: либо автор предложения, либо владелец заказа, либо администратор
 	if proposal.executor_id != current_user.id and proposal.order.customer_id != current_user.id and not current_user.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="Недостаточно прав для просмотра предложения"
+		raise ForbiddenError(
+			"Недостаточно прав для просмотра предложения",
+			code="proposal_access_denied",
+			resource="proposal",
+			resource_id=proposal_id,
 		)
 	
 	return proposal
@@ -299,7 +234,7 @@ async def get_proposal_by_id(
 	"/proposals/{proposal_id}",
 	response_model=OrderProposalResponse,
 	summary="Обновление предложения",
-	description="Обновление данных предложения (для админа автора)"
+	description="Обновление данных предложения (для автора или админа)"
 )
 async def update_proposal(
 		proposal_id: int,
@@ -307,24 +242,15 @@ async def update_proposal(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		# Преобразуем Pydantic модель в dict, исключая None значения
-		update_dict = update_data.model_dump(exclude_unset=True)
-		
-		proposal = await OrderProposalService.update_proposal(
-			session, proposal_id, update_dict, current_user.id, current_user.is_admin
-		)
-		return proposal
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST,
-			detail=str(e)
-		)
+	update_dict = update_data.model_dump(exclude_unset=True)
+	return await OrderProposalService.update_proposal(
+		session, proposal_id, update_dict, current_user.id, current_user.is_admin
+	)
 
 
 @router.delete(
 	"/proposals/{proposal_id}",
-	status_code=status.HTTP_204_NO_CONTENT,
+	status_code=204,
 	summary="Удаление предложения",
 	description="Удаление предложения (автор или администратор)"
 )
@@ -333,12 +259,6 @@ async def delete_proposal(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	try:
-		await OrderProposalService.delete_proposal(
-			session, proposal_id, current_user.id, current_user.is_admin
-		)
-	except ValueError as e:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail=str(e)
-		)
+	await OrderProposalService.delete_proposal(
+		session, proposal_id, current_user.id, current_user.is_admin
+	)

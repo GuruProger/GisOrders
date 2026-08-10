@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, List
 from enum import Enum
 
@@ -94,8 +94,7 @@ class OrderResponse(BaseModel):
 	lat: float
 	lon: float
 	
-	class Config:
-		from_attributes = True
+	model_config = ConfigDict(from_attributes=True)
 
 
 # Схемы для OrderProposal
@@ -119,8 +118,7 @@ class OrderProposalResponse(OrderProposalBase):
 	order_id: int
 	executor_id: int
 	
-	class Config:
-		from_attributes = True
+	model_config = ConfigDict(from_attributes=True)
 
 
 # Специальные схемы
