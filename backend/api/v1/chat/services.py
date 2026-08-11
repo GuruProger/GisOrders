@@ -1,9 +1,8 @@
 import logging
-from sqlalchemy import select, func, and_, desc, update
+from sqlalchemy import select, func, and_, desc, update, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Any
 from .models import Chat, Message
 from .schemas import ChatCreate, MessageCreate
 from ..orders.models import OrderProposal
@@ -52,26 +51,51 @@ class ChatService:
 	@staticmethod
 	async def get_chat_by_id(session: AsyncSession, chat_id: int) -> Optional[Chat]:
 		"""Получение чата по ID"""
-		stmt = select(Chat).where(Chat.id == chat_id).options(
-			selectinload(Chat.messages)
-		)
+		stmt = select(Chat).where(Chat.id == chat_id)
 		result = await session.execute(stmt)
 		return result.scalar_one_or_none()
 	
 	@staticmethod
-	async def get_user_chats(session: AsyncSession, user_id: int) -> Sequence[Chat]:
-		"""Получение всех чатов пользователя"""
-		stmt = select(Chat).where(
-			and_(
-				Chat.is_active == True,
-				(Chat.customer_id == user_id) | (Chat.executor_id == user_id)
+	async def get_user_chats(session: AsyncSession, user_id: int) -> Sequence[Row[tuple[Chat, Optional[str], int]]]:
+		"""Получение всех чатов пользователя с последним сообщением и счётчиком непрочитанных."""
+		
+		# Последнее сообщение для каждого чата
+		last_message_subq = (
+			select(Message.text)
+			.where(Message.chat_id == Chat.id)
+			.order_by(Message.created_at.desc(), Message.id.desc())
+			.limit(1)
+			.correlate(Chat)
+			.scalar_subquery()
+			.label("last_message")
+		)
+		
+		# Количество непрочитанных сообщений от собеседника
+		unread_count_subq = (
+			select(func.count(Message.id))
+			.where(
+				Message.chat_id == Chat.id,
+				Message.is_read == False,
+				Message.sender_id != user_id
 			)
-		).options(
-			selectinload(Chat.messages)
-		).order_by(desc(Chat.updated_at))
+			.correlate(Chat)
+			.scalar_subquery()
+			.label("unread_count")
+		)
+		
+		stmt = (
+			select(Chat, last_message_subq, unread_count_subq)
+			.where(
+				and_(
+					Chat.is_active == True,
+					(Chat.customer_id == user_id) | (Chat.executor_id == user_id)
+				)
+			)
+			.order_by(desc(Chat.updated_at))
+		)
 		
 		result = await session.execute(stmt)
-		return result.scalars().all()
+		return result.all()  # Возвращает список кортежей (Chat, last_message, unread_count)
 	
 	@staticmethod
 	async def close_chat(session: AsyncSession, chat_id: int, user_id: int) -> Chat:
@@ -191,13 +215,29 @@ class MessageService:
 		return result.scalars().all()
 	
 	@staticmethod
+	async def get_last_message_text(
+			session: AsyncSession,
+			chat_id: int,
+	) -> Optional[str]:
+		"""Получить текст последнего сообщения в чате."""
+		stmt = (
+			select(Message.text)
+			.where(Message.chat_id == chat_id)
+			.order_by(Message.created_at.desc(), Message.id.desc())
+			.limit(1)
+		)
+		result = await session.execute(stmt)
+		return result.scalar_one_or_none()
+	
+	@staticmethod
 	async def mark_messages_as_read(
 			session: AsyncSession,
 			chat_id: int,
-			user_id: int
+			user_id: int,
 	) -> int:
-		"""Пометить все сообщения в чате как прочитанные (кроме своих)"""
+		"""Пометить все сообщения в чате как прочитанные (кроме своих)."""
 		chat = await ChatService.get_chat_by_id(session, chat_id)
+		
 		if not chat:
 			raise NotFoundError(
 				"Чат не найден",
@@ -205,7 +245,6 @@ class MessageService:
 				resource_id=chat_id,
 			)
 		
-		# Проверяем участие пользователя
 		if chat.customer_id != user_id and chat.executor_id != user_id:
 			raise ForbiddenError(
 				"Недостаточно прав для пометки сообщений",
@@ -214,27 +253,28 @@ class MessageService:
 				resource_id=chat_id,
 			)
 		
-		# Определяем ID собеседника
-		other_user_id = chat.executor_id if chat.customer_id == user_id else chat.customer_id
+		other_user_id = (
+			chat.executor_id
+			if chat.customer_id == user_id
+			else chat.customer_id
+		)
 		
 		stmt = (
-			select(Message)
+			update(Message)
 			.where(
 				and_(
 					Message.chat_id == chat_id,
 					Message.sender_id == other_user_id,
-					Message.is_read == False
+					Message.is_read == False,
 				)
 			)
+			.values(is_read=True)
 		)
+		
 		result = await session.execute(stmt)
-		messages = result.scalars().all()
-		
-		for message in messages:
-			message.is_read = True
-		
 		await session.flush()
-		return len(messages)
+		
+		return int(result.rowcount or 0)
 	
 	@staticmethod
 	async def get_unread_count(session: AsyncSession, chat_id: int, user_id: int) -> int:
@@ -278,7 +318,10 @@ class MessageService:
 				Message.sender_id != user_id,
 				Message.chat_id.in_(
 					select(Chat.id).where(
-						(Chat.customer_id == user_id) | (Chat.executor_id == user_id)
+						and_(
+							Chat.is_active == True,
+							(Chat.customer_id == user_id) | (Chat.executor_id == user_id)
+						)
 					)
 				)
 			)

@@ -4,7 +4,6 @@ from typing import Annotated, List
 from core.database import db_helper
 from core.security import get_current_active_user
 from core.errors import NotFoundError, ForbiddenError
-from .models import Chat, Message
 from .schemas import (
 	ChatResponse, ChatCreate, ChatWithMessagesResponse,
 	MessageResponse, MessageCreate
@@ -17,29 +16,18 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 
 @router.get(
 	"/my",
-	response_model=List[ChatResponse],
+	response_model=list[ChatResponse],
 	summary="Мои чаты",
-	description="Получение списка всех чатов текущего пользователя"
 )
 async def get_my_chats(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-	chats = await ChatService.get_user_chats(session, current_user.id)
+	rows = await ChatService.get_user_chats(session, current_user.id)
 	
-	# Для каждого чата получаем последнее сообщение и счётчик непрочитанных
 	result = []
-	for chat in chats:
-		# Получаем последнее сообщение
-		last_message = None
-		if chat.messages:
-			last_msg = max(chat.messages, key=lambda m: m.created_at)
-			last_message = last_msg.text
-		
-		# Получаем количество непрочитанных
-		unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
-		
-		chat_dict = ChatResponse(
+	for chat, last_message, unread_count in rows:
+		result.append(ChatResponse(
 			id=chat.id,
 			order_id=chat.order_id,
 			customer_id=chat.customer_id,
@@ -49,11 +37,22 @@ async def get_my_chats(
 			created_at=chat.created_at,
 			updated_at=chat.updated_at,
 			last_message=last_message,
-			unread_count=unread_count
-		)
-		result.append(chat_dict)
-	
+			unread_count=unread_count or 0,
+		))
 	return result
+
+
+@router.get(
+	"/unread/count",
+	summary="Количество непрочитанных сообщений",
+	description="Получение общего количества непрочитанных сообщений"
+)
+async def get_unread_count(
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	count = await MessageService.get_total_unread_count(session, current_user.id)
+	return {"unread_count": count}
 
 
 @router.get(
@@ -86,17 +85,18 @@ async def get_chat(
 			resource_id=chat_id,
 		)
 	
-	# Получаем сообщения
 	messages = await MessageService.get_chat_messages(session, chat_id, limit, offset)
 	
-	# Получаем количество непрочитанных
-	unread_count = await MessageService.get_unread_count(session, chat_id, current_user.id)
+	unread_count = await MessageService.get_unread_count(
+		session,
+		chat_id,
+		current_user.id,
+	)
 	
-	# Получаем последнее сообщение
-	last_message = None
-	if chat.messages:
-		last_msg = max(chat.messages, key=lambda m: m.created_at)
-		last_message = last_msg.text
+	last_message = await MessageService.get_last_message_text(
+		session,
+		chat_id,
+	)
 	
 	return ChatWithMessagesResponse(
 		id=chat.id,
@@ -162,19 +162,6 @@ async def mark_as_read(
 	return {"message": f"Отмечено {count} сообщений как прочитанных"}
 
 
-@router.get(
-	"/unread/count",
-	summary="Количество непрочитанных сообщений",
-	description="Получение общего количества непрочитанных сообщений"
-)
-async def get_unread_count(
-		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
-		current_user: Annotated[User, Depends(get_current_active_user)],
-):
-	count = await MessageService.get_total_unread_count(session, current_user.id)
-	return {"unread_count": count}
-
-
 @router.post(
 	"/{chat_id}/close",
 	response_model=ChatResponse,
@@ -188,13 +175,10 @@ async def close_chat(
 ):
 	chat = await ChatService.close_chat(session, chat_id, current_user.id)
 	
-	# Формируем ответ
-	last_message = None
-	if chat.messages:
-		last_msg = max(chat.messages, key=lambda m: m.created_at)
-		last_message = last_msg.text
-	
-	unread_count = await MessageService.get_unread_count(session, chat.id, current_user.id)
+	last_message = await MessageService.get_last_message_text(
+		session,
+		chat.id,
+	)
 	
 	return ChatResponse(
 		id=chat.id,
@@ -206,5 +190,5 @@ async def close_chat(
 		created_at=chat.created_at,
 		updated_at=chat.updated_at,
 		last_message=last_message,
-		unread_count=unread_count
+		unread_count=0,  # После close_chat все прочитаны
 	)
