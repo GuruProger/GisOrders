@@ -75,6 +75,12 @@ class ConflictError(AppError):
 	default_code = "conflict"
 
 
+class PayloadTooLargeError(AppError):
+	status_code = 413
+	default_detail = "Файл слишком большой"
+	default_code = "payload_too_large"
+
+
 class ProposalLimitError(AppError):
 	status_code = status.HTTP_429_TOO_MANY_REQUESTS
 	default_detail = "Достигнут лимит предложений за день"

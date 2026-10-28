@@ -5,6 +5,7 @@ from pydantic import Field, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 # Значения, которые слишком часто оставляют в примерах и локальных конфигах
 INSECURE_JWT_SECRETS = {
@@ -47,6 +48,20 @@ class Settings(BaseSettings):
 		if value.strip().lower() in INSECURE_JWT_SECRETS:
 			raise ValueError("JWT_SECRET_KEY содержит небезопасное значение")
 		return value
+	
+	# Загрузки
+	media_root: Path = Field(default=BACKEND_ROOT / "media", alias="MEDIA_ROOT")
+	media_url: str = "/media"
+	max_upload_size_mb: int = Field(default=5, alias="MEDIA_MAX_UPLOAD_SIZE_MB")
+	max_image_dimension: int = 1920
+	
+	@field_validator("media_url")
+	@classmethod
+	def validate_media_url(cls, value: str) -> str:
+		normalized = "/" + value.strip("/")
+		if normalized == "/":
+			raise ValueError("MEDIA_URL не может быть корнем сайта")
+		return normalized
 	
 	# Бизнес-логика
 	max_proposals_per_day: int = 3

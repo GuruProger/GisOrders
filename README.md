@@ -76,6 +76,8 @@ uv run python scripts/create_admin.py --email admin@example.com
 | `LOGIN_RATE_LIMIT` / `LOGIN_RATE_WINDOW_SECONDS` | попытки входа на IP+email | `10` / `60` |
 | `REGISTER_RATE_LIMIT` / `REGISTER_RATE_WINDOW_SECONDS` | регистрации на IP | `5` / `3600` |
 | `MAX_PROPOSALS_PER_DAY` | лимит откликов за 24 часа | `3` |
+| `MEDIA_ROOT` | каталог для загруженных изображений | `backend/media` |
+| `MEDIA_MAX_UPLOAD_SIZE_MB` | максимальный размер загружаемого файла | `5` |
 | `CORS_ORIGINS` | JSON-массив источников | `["*"]` |
 | `CORS_ALLOW_CREDENTIALS` | credentialed CORS (для Bearer не нужен) | `false` |
 
@@ -89,6 +91,7 @@ uv run python scripts/create_admin.py --email admin@example.com
 | Заказы | `POST /orders/`, `GET /orders/my`, `GET /orders/available`, `GET/PATCH/DELETE /orders/{id}`, `POST /orders/{id}/close` |
 | Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
+| Загрузки | `POST /uploads/images` (multipart `file`); файлы отдаются с `/media/...` |
 
 ## Бизнес-правила
 
@@ -110,6 +113,8 @@ uv run python scripts/create_admin.py --email admin@example.com
 - Редактировать и отзывать можно только `pending`-отклики.
 - В закрытый чат писать нельзя; доступ к чату есть только у его участников.
 - Заблокированный пользователь (`is_active=false`) не может войти, а выданные ранее токены перестают работать; блокировка доступна только админам.
+- `POST /uploads/images` принимает только JPEG, PNG и WebP до `MEDIA_MAX_UPLOAD_SIZE_MB`. Файл проверяется через Pillow (а не по расширению), поворачивается по EXIF, уменьшается до 1920 px по длинной стороне и сохраняется как WebP с UUID-именем; ответ содержит `url` для поля `photos` заказа.
+- `/media/*` отдаётся статикой без авторизации: имена файлов — случайные UUID, содержимое не секретно.
 - Заказы с истёкшим дедлайном не попадают в список доступных.
 - Время хранится в UTC (`timestamptz`); `deadline` без таймзоны трактуется как UTC.
 

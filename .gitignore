@@ -188,3 +188,6 @@ logs
 .env.*
 !.env.example
 pytest.ini
+
+# Загруженные пользователями изображения
+backend/media/

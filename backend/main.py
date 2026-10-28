@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from core.database import db_helper
@@ -21,6 +22,15 @@ app = FastAPI(lifespan=lifespan)
 register_error_handlers(app)
 
 app.include_router(api_router)
+
+# Загруженные изображения отдаются напрямую, без авторизации:
+# URL содержит неугадываемый UUID, а сами файлы не секретны.
+settings.media_root.mkdir(parents=True, exist_ok=True)
+app.mount(
+    settings.media_url,
+    StaticFiles(directory=settings.media_root),
+    name="media",
+)
 
 app.add_middleware(
     CORSMiddleware,

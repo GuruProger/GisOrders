@@ -10,6 +10,7 @@ dependencies = [
     "fastapi==0.117.0",
     "geoalchemy2>=0.18.1",
     "greenlet>=3.2.4",
+    "pillow>=13.0.0",
     "pydantic-settings>=2.14.2",
     "pydantic[email]==2.12.0a1",
     "python-jose==3.5.0",

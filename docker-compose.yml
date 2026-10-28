@@ -35,9 +35,11 @@ services:
     volumes:
       - ./backend:/app
       - /app/.venv
+      - media_data:/app/media
 
 volumes:
   postgres_data:
+  media_data:
 
 networks:
   gis-network:
