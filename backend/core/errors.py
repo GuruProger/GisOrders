@@ -157,28 +157,6 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 	)
 
 
-async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
-	"""
-	Временный обработчик для обратной совместимости.
-
-	Пока сервисы еще могут где-то использовать ValueError,
-	он будет превращаться в 400.
-	"""
-	
-	logger.info(
-		"ValueError converted to 400",
-		extra=_request_extra(request),
-	)
-	
-	return JSONResponse(
-		status_code=status.HTTP_400_BAD_REQUEST,
-		content={
-			"detail": str(exc),
-			"error_code": "value_error",
-		},
-	)
-
-
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
 	"""
 	Ловит все необработанные ошибки и не отдает технические детали клиенту.
@@ -200,5 +178,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 def register_error_handlers(app: FastAPI) -> None:
 	app.add_exception_handler(AppError, app_error_handler)
-	app.add_exception_handler(ValueError, value_error_handler)
 	app.add_exception_handler(Exception, unhandled_exception_handler)
