@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.errors import ForbiddenError, NotFoundError
 from core.security import get_user_from_token
+
 from ..chat.models import Chat
 from ..chat.services import ChatService
 from ..users.models import User

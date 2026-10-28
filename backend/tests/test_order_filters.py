@@ -1,5 +1,4 @@
 import pytest
-
 from conftest import make_order
 
 AVAILABLE_API = "/api/v1/orders/available"

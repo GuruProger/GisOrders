@@ -3,21 +3,21 @@ from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+from geoalchemy2.elements import WKTElement
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
-from geoalchemy2.elements import WKTElement
 
-from core.database import Base, db_helper
-from core.config import settings
-from core.auth import get_password_hash, create_access_token
-from core.security import get_current_user
+from api.v1.chat.models import Chat, Message  # noqa: F401
+from api.v1.orders.models import Order, OrderProposal, OrderStatus
 
 # Импортируем все модели, чтобы Base.metadata знал о них при create_all
 from api.v1.users.models import User
-from api.v1.orders.models import Order, OrderStatus, OrderProposal
-from api.v1.chat.models import Chat, Message
+from core.auth import create_access_token, get_password_hash
+from core.config import settings
+from core.database import Base, db_helper
+from core.security import get_current_user
 from main import app
 
 _db_url = str(settings.db_url)

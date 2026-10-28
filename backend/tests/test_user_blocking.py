@@ -1,5 +1,4 @@
 import pytest
-
 from conftest import auth_headers
 
 ME_API = "/api/v1/users/me"

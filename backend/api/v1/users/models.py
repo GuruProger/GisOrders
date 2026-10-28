@@ -1,15 +1,15 @@
-from typing import List, TYPE_CHECKING, Optional
 from datetime import datetime
+from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import String, Boolean, true, Integer, ForeignKey, DateTime
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
 from core.time import utcnow
 
 if TYPE_CHECKING:
-	from ..orders.models import Order, OrderProposal
 	from ..chat.models import Chat, Message
+	from ..orders.models import Order, OrderProposal
 
 
 class User(Base):

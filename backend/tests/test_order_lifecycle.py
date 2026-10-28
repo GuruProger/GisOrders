@@ -1,10 +1,10 @@
 import pytest
+from conftest import auth_headers, make_user
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.v1.chat.models import Chat
 from api.v1.orders.models import OrderProposal, ProposalStatus
-from conftest import make_user, auth_headers
 
 ORDER_API = "/api/v1/orders/{order_id}"
 PROPOSALS_API = "/api/v1/orders/{order_id}/proposals"

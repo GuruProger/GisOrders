@@ -6,7 +6,6 @@ from sqlalchemy import select, update
 
 from api.v1.users.models import RefreshToken
 from core.time import utcnow
-from conftest import auth_headers
 
 LOGIN_API = "/api/v1/users/login/json"
 REFRESH_API = "/api/v1/users/refresh"

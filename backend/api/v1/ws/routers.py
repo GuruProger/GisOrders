@@ -8,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.database import db_helper
 from core.errors import (
-	AppError, AuthenticationError, ForbiddenError, NotFoundError,
+	AppError,
+	AuthenticationError,
+	ForbiddenError,
+	NotFoundError,
 )
+
 from ..chat.models import Chat
 from ..chat.services import MessageService
 from ..users.models import User

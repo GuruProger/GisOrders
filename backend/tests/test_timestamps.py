@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-
 ORDERS_API = "/api/v1/orders/"
 
 

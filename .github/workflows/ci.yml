@@ -55,5 +55,11 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
 
+      - name: Check migration drift
+        run: uv run alembic check
+
+      - name: Lint
+        run: uv run ruff check .
+
       - name: Run tests
-        run: uv run pytest -q
+        run: uv run pytest -q --cov=api --cov=core --cov-report=term-missing

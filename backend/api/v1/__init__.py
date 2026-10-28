@@ -1,8 +1,9 @@
 from fastapi import APIRouter
-from api.v1.users.routers import router as user_router
-from api.v1.orders.routers import router as order_router
+
 from api.v1.chat.routers import router as chat_router
+from api.v1.orders.routers import router as order_router
 from api.v1.uploads.routers import router as upload_router
+from api.v1.users.routers import router as user_router
 from api.v1.ws.routers import router as ws_router
 
 router = APIRouter()

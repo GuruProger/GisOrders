@@ -1,9 +1,9 @@
 import pytest
+from conftest import auth_headers, make_user
 from sqlalchemy import select
 
-from api.v1.orders.models import OrderProposal
 from api.v1.chat.models import Chat, Message
-from conftest import make_user, auth_headers
+from api.v1.orders.models import OrderProposal
 
 PROPOSAL_BODY = {"proposed_price": 5000.0, "message": "Готов выполнить работу"}
 

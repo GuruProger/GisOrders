@@ -1,23 +1,34 @@
+import datetime
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
-import datetime
-from core.database import db_helper
-from core.security import get_current_user, get_current_active_user
+
 from core.auth import create_access_token
+from core.config import settings
+from core.database import db_helper
 from core.errors import (
-	AuthenticationError, ForbiddenError, BusinessRuleError, NotFoundError,
+	AuthenticationError,
+	BusinessRuleError,
+	ForbiddenError,
+	NotFoundError,
 	RateLimitError,
 )
 from core.rate_limit import SlidingWindowLimiter
+from core.security import get_current_active_user
+
 from .models import User
 from .schemas import (
-	UserCreate, UserResponse, UserPublicResponse, Token, LoginRequest, UserUpdate,
+	LoginRequest,
 	RefreshRequest,
+	Token,
+	UserCreate,
+	UserPublicResponse,
+	UserResponse,
+	UserUpdate,
 )
-from .services import UserService, RefreshTokenService
-from core.config import settings
+from .services import RefreshTokenService, UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 

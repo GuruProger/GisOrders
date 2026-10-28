@@ -1,17 +1,25 @@
+from typing import Annotated, Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated, Optional
+
 from core.database import db_helper
+from core.errors import ForbiddenError, NotFoundError
 from core.security import get_current_active_user
-from core.errors import NotFoundError, ForbiddenError
-from .models import Order, OrderProposal, OrderStatus
-from .schemas import (
-	OrderCreate, OrderResponse, OrderUpdate, OrderProposalCreate,
-	OrderProposalResponse, OrderProposalUpdate, OrderFilters,
-	OrderWithProposalsResponse, OrderProposalWithOrderResponse
-)
-from .services import OrderService, OrderProposalService
+
 from ..users.models import User
+from .models import OrderStatus
+from .schemas import (
+	OrderCreate,
+	OrderFilters,
+	OrderProposalCreate,
+	OrderProposalResponse,
+	OrderProposalUpdate,
+	OrderProposalWithOrderResponse,
+	OrderResponse,
+	OrderUpdate,
+)
+from .services import OrderProposalService, OrderService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 

@@ -1,21 +1,21 @@
 import logging
+from datetime import timedelta
+from typing import Optional, Sequence
+
 from geoalchemy2 import Geography
-from sqlalchemy import select, and_, or_, func, update, text
-from sqlalchemy.orm import selectinload
+from geoalchemy2.elements import WKTElement
+from geoalchemy2.functions import ST_DWithin, ST_Point, ST_SetSRID
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from geoalchemy2.functions import ST_DWithin, ST_Point, ST_SetSRID
-from geoalchemy2.elements import WKTElement
+from sqlalchemy.orm import selectinload
+
 from core.config import settings
-from core.errors import (
-	NotFoundError, ForbiddenError, ConflictError,
-	BusinessRuleError, ProposalLimitError
-)
+from core.errors import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError, ProposalLimitError
 from core.time import utcnow
+
 from .models import Order, OrderProposal, OrderStatus, ProposalStatus
-from .schemas import OrderCreate, OrderUpdate, OrderProposalCreate, OrderProposalUpdate, OrderFilters
-from typing import Optional, Sequence
-from datetime import timedelta
+from .schemas import OrderCreate, OrderFilters, OrderProposalCreate
 
 logger = logging.getLogger(__name__)
 

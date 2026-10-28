@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import select, func
+from conftest import auth_headers, make_order, make_proposal, make_user
+from sqlalchemy import func, select
 
 from api.v1.orders.models import Order, OrderProposal
 from core.config import settings
-from conftest import make_user, make_order, make_proposal, auth_headers
 
 PROPOSAL_BODY = {"proposed_price": 5000.0, "message": "Готов выполнить работу"}
 

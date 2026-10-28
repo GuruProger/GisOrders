@@ -2,15 +2,15 @@ import json
 import re
 from typing import AsyncGenerator
 
-from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase, declared_attr
-from sqlalchemy.ext.asyncio import (
-	create_async_engine,
-	AsyncEngine,
-	async_sessionmaker,
-	AsyncSession,
-)
 from geoalchemy2 import Geography, Geometry
+from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import (
+	AsyncEngine,
+	AsyncSession,
+	async_sessionmaker,
+	create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, declared_attr
 
 from core.config import settings
 
@@ -93,5 +93,6 @@ db_helper = DatabaseHelper(
 )
 
 # Импортируем все модели здесь (иначе алембик не будет видеть модели)
-from api.v1.users.models import User
-from api.v1.orders.models import Order, OrderProposal, OrderStatus
+from api.v1.chat.models import Chat, Message  # noqa: E402, F401
+from api.v1.orders.models import Order, OrderProposal, OrderStatus  # noqa: E402, F401
+from api.v1.users.models import User  # noqa: E402, F401

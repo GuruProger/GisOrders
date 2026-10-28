@@ -1,8 +1,10 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
-from typing import Optional, List
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.time import as_utc, utcnow
+
 from .models import OrderStatus, ProposalStatus
 
 

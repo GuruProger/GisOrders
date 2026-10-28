@@ -1,12 +1,15 @@
 import logging
-from sqlalchemy import select, func, and_, desc, update, Row
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional, Sequence
+
+from sqlalchemy import Row, and_, desc, func, select, update
 from sqlalchemy.exc import IntegrityError
-from typing import Optional, Sequence, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.errors import ConflictError, ForbiddenError, NotFoundError
+
+from ..orders.models import OrderProposal, ProposalStatus
 from .models import Chat, Message
 from .schemas import ChatCreate, MessageCreate
-from ..orders.models import OrderProposal, ProposalStatus
-from core.errors import NotFoundError, ForbiddenError, ConflictError, BusinessRuleError
 
 logger = logging.getLogger(__name__)
 

@@ -6,11 +6,11 @@ from jose import jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import settings
-from core.errors import AuthenticationError, ForbiddenError
-from core.database import db_helper
-from api.v1.users.services import UserService
 from api.v1.users.models import User
+from api.v1.users.services import UserService
+from core.config import settings
+from core.database import db_helper
+from core.errors import AuthenticationError, ForbiddenError
 
 oauth2_scheme = OAuth2PasswordBearer(
 	tokenUrl="/api/v1/users/login",

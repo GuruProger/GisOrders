@@ -1,11 +1,12 @@
-import factory
 import random
 from datetime import datetime, timedelta, timezone
+
+import factory
 from geoalchemy2 import WKTElement
 
-from api.v1.users.models import User
-from api.v1.orders.models import Order, OrderProposal, OrderStatus
 from api.v1.chat.models import Chat, Message
+from api.v1.orders.models import Order, OrderProposal, OrderStatus
+from api.v1.users.models import User
 from core.auth import get_password_hash
 
 

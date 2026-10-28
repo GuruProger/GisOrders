@@ -1,16 +1,16 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated, List
+
 from core.database import db_helper
+from core.errors import ForbiddenError, NotFoundError
 from core.security import get_current_active_user
-from core.errors import NotFoundError, ForbiddenError
-from .schemas import (
-	ChatResponse, ChatCreate, ChatWithMessagesResponse,
-	MessageResponse, MessageCreate
-)
-from .services import ChatService, MessageService
+
 from ..users.models import User
 from ..ws.manager import manager
+from .schemas import ChatResponse, ChatWithMessagesResponse, MessageCreate, MessageResponse
+from .services import ChatService, MessageService
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
