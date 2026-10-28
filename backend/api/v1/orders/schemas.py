@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Optional, List
 from enum import Enum
 
@@ -56,6 +56,14 @@ class OrderUpdate(BaseModel):
 	tree_height: Optional[float] = Field(None, gt=0)
 	tree_diameter: Optional[float] = Field(None, gt=0)
 	photos: Optional[List[str]] = None
+	lat: Optional[float] = Field(None, ge=-90, le=90)
+	lon: Optional[float] = Field(None, ge=-180, le=180)
+	
+	@model_validator(mode="after")
+	def validate_coordinates_pair(self):
+		if (self.lat is None) != (self.lon is None):
+			raise ValueError('lat и lon должны передаваться вместе')
+		return self
 	
 	@field_validator('deadline')
 	def validate_deadline(cls, v):

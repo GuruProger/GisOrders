@@ -190,6 +190,11 @@ class OrderService:
 			)
 		
 		# Обновляем только переданные поля
+		lat = update_data.pop("lat", None)
+		lon = update_data.pop("lon", None)
+		if lat is not None and lon is not None:
+			order.location = WKTElement(f'POINT({lon} {lat})', srid=4326)
+		
 		for field, value in update_data.items():
 			if hasattr(order, field):
 				setattr(order, field, value)
