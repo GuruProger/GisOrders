@@ -36,7 +36,7 @@ export function Field({ label, htmlFor, error, hint, children, className }: Fiel
       </label>
       {child}
       {hint && (
-        <p id={hintId} className="text-sm text-muted">
+        <p id={hintId} className="text-sm text-muted-strong">
           {hint}
         </p>
       )}

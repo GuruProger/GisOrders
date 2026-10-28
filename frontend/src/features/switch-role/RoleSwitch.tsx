@@ -63,7 +63,7 @@ export function RoleSwitch() {
             onKeyDown={(event) => handleKeyDown(event, option.value)}
             className={cn(
               'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500',
-              checked ? 'bg-card text-moss-600 shadow-sm' : 'text-muted hover:text-moss-600',
+              checked ? 'bg-card text-moss-600 shadow-sm' : 'text-muted-strong hover:text-moss-600',
             )}
           >
             <span className="max-[399px]:hidden">{option.label}</span>

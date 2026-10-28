@@ -34,7 +34,7 @@ const tabClasses = ({ isActive }: { isActive: boolean }): string =>
     'inline-flex min-h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-leaf-500',
     isActive
       ? 'border-moss-600 text-moss-600'
-      : 'border-transparent text-muted hover:text-moss-600',
+      : 'border-transparent text-muted-strong hover:text-moss-600',
   )
 
 /** Inline tab row shown from 1024 px upwards. */

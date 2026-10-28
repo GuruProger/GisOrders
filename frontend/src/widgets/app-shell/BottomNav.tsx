@@ -11,7 +11,7 @@ export interface BottomNavProps {
 const linkClasses = ({ isActive }: { isActive: boolean }): string =>
   cn(
     'flex min-h-16 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-leaf-500',
-    isActive ? 'text-moss-600' : 'text-muted hover:text-moss-600',
+    isActive ? 'text-moss-600' : 'text-muted-strong hover:text-moss-600',
   )
 
 /** Fixed bottom navigation shown below the 1024 px breakpoint. */

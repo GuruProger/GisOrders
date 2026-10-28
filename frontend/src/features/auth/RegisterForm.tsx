@@ -52,7 +52,7 @@ function PasswordRequirements({ password }: { password: string }) {
         <li
           key={label}
           data-met={met ? 'true' : 'false'}
-          className={met ? 'text-moss-600' : 'text-muted'}
+          className={met ? 'text-moss-600' : 'text-muted-strong'}
         >
           <span aria-hidden="true">{met ? '✓' : '•'}</span> <span>{label}</span>
         </li>

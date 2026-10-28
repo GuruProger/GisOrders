@@ -20,10 +20,10 @@ const labels: Record<BadgeVariant, string> = {
 
 const variants: Record<BadgeVariant, string> = {
   open: 'bg-sage-100 text-moss-600',
-  work: 'bg-amber-500/15 text-amber-500',
-  closed: 'bg-line text-muted',
+  work: 'bg-amber-500/15 text-amber-700',
+  closed: 'bg-line text-muted-strong',
   accepted: 'bg-moss-600 text-white',
-  pending: 'bg-amber-500/15 text-amber-500',
+  pending: 'bg-amber-500/15 text-amber-700',
   rejected: 'bg-terracotta-50 text-terracotta-600',
 }
 
