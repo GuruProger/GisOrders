@@ -69,3 +69,30 @@ async def test_max_price_filters_by_order_budget_ceiling(
 	
 	assert affordable.id in ids, "Заказ с потолком 5000 должен пройти фильтр max_price=6000"
 	assert expensive.id not in ids, "Заказ с потолком 20000 не должен проходить фильтр max_price=6000"
+
+
+@pytest.mark.asyncio
+async def test_zero_max_price_filter_is_applied(
+		client, db, customer, exec_headers, current_user_override
+):
+	"""max_price=0 - валидный фильтр, а не отсутствие фильтра."""
+	free = await make_order(
+		db,
+		customer_id=customer.id,
+		title="Нулевой бюджет",
+		min_price=0.0,
+		max_price=0.0,
+	)
+	paid = await make_order(
+		db,
+		customer_id=customer.id,
+		title="Платный заказ",
+		min_price=1000.0,
+		max_price=5000.0,
+	)
+	
+	ids = await get_available_ids(client, exec_headers, max_price=0)
+	
+	assert free.id in ids, "Заказ с нулевым потолком должен пройти фильтр max_price=0"
+	assert paid.id not in ids, "Заказ с потолком 5000 не должен проходить фильтр max_price=0"
+

@@ -103,14 +103,14 @@ class OrderService:
 		
 		# Фильтрация по цене: сравниваем нижнюю границу бюджета заказа с min_price,
 		# а верхнюю - с max_price. NULL означает отсутствие ограничения.
-		if filters.min_price:
+		if filters.min_price is not None:
 			stmt = stmt.where(
 				or_(
 					Order.min_price >= filters.min_price,
 					Order.min_price.is_(None)
 				)
 			)
-		if filters.max_price:
+		if filters.max_price is not None:
 			stmt = stmt.where(
 				or_(
 					Order.max_price <= filters.max_price,
