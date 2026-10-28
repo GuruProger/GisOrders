@@ -1,9 +1,11 @@
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Optional
+from datetime import datetime
 
-from sqlalchemy import String, Boolean, true
+from sqlalchemy import String, Boolean, true, Integer, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
+from core.time import utcnow
 
 if TYPE_CHECKING:
 	from ..orders.models import Order, OrderProposal
@@ -53,4 +55,30 @@ class User(Base):
 		"Message",
 		back_populates="sender",
 		cascade="all, delete-orphan"
+	)
+
+
+class RefreshToken(Base):
+	"""Opaque refresh-токен; в базе хранится только его SHA-256."""
+	
+	id: Mapped[int] = mapped_column(primary_key=True)
+	token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+	user_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+		index=True,
+		nullable=False,
+	)
+	
+	created_at: Mapped[datetime] = mapped_column(
+		DateTime(timezone=True), default=utcnow, nullable=False
+	)
+	expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+	revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+	
+	# Для расследования reuse: какой токен заменил этот
+	replaced_by_id: Mapped[Optional[int]] = mapped_column(
+		Integer,
+		ForeignKey("refresh_token.id", ondelete="SET NULL"),
+		nullable=True,
 	)

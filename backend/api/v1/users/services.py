@@ -1,11 +1,17 @@
 import logging
-from sqlalchemy import select
+import hashlib
+import secrets
+from datetime import timedelta
+
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from .models import User
+from .models import User, RefreshToken
 from .schemas import UserCreate
 from core.auth import get_password_hash, verify_password
-from core.errors import ConflictError, NotFoundError
+from core.config import settings
+from core.errors import AuthenticationError, ConflictError, ForbiddenError, NotFoundError
+from core.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +216,9 @@ class UserService:
 			)
 		
 		user.is_active = is_active
+		if not is_active:
+			await RefreshTokenService.revoke_all_for_user(session, user.id)
+		
 		await session.flush()
 		await session.refresh(user)
 		return user
@@ -228,3 +237,111 @@ class UserService:
 			)
 		await session.delete(user)
 		await session.flush()
+
+
+class RefreshTokenService:
+	"""Opaque refresh-токены с ротацией и детектом повторного использования."""
+	
+	@staticmethod
+	def hash_token(token: str) -> str:
+		return hashlib.sha256(token.encode("utf-8")).hexdigest()
+	
+	@staticmethod
+	async def _create(session: AsyncSession, user_id: int) -> tuple[RefreshToken, str]:
+		raw_token = secrets.token_urlsafe(48)
+		record = RefreshToken(
+			token_hash=RefreshTokenService.hash_token(raw_token),
+			user_id=user_id,
+			expires_at=utcnow() + timedelta(days=settings.refresh_token_expire_days),
+		)
+		session.add(record)
+		await session.flush()
+		return record, raw_token
+	
+	@staticmethod
+	async def issue(session: AsyncSession, user_id: int) -> str:
+		"""Создаёт refresh-токен и возвращает его открытое значение (единственный раз)."""
+		_, raw_token = await RefreshTokenService._create(session, user_id)
+		return raw_token
+	
+	@staticmethod
+	async def rotate(session: AsyncSession, raw_token: str) -> tuple[User, str]:
+		"""
+		Обменивает refresh-токен на новую пару.
+		
+		Повторное использование уже отозванного токена считается компрометацией:
+		отзываются все активные сессии пользователя.
+		"""
+		stmt = (
+			select(RefreshToken)
+			.where(RefreshToken.token_hash == RefreshTokenService.hash_token(raw_token))
+			.with_for_update()
+		)
+		record = (await session.execute(stmt)).scalar_one_or_none()
+		
+		if not record:
+			raise AuthenticationError(
+				"Недействительный refresh-токен",
+				code="refresh_token_invalid",
+			)
+		
+		if record.revoked_at is not None:
+			await RefreshTokenService.revoke_all_for_user(session, record.user_id)
+			await session.flush()
+			raise AuthenticationError(
+				"Refresh-токен уже использован. Все сессии отозваны",
+				code="refresh_token_reuse",
+			)
+		
+		if record.expires_at <= utcnow():
+			record.revoked_at = utcnow()
+			await session.flush()
+			raise AuthenticationError(
+				"Refresh-токен истёк",
+				code="refresh_token_expired",
+			)
+		
+		user = await UserService.get_user_by_id(session, record.user_id)
+		if user is None:
+			raise AuthenticationError(
+				"Недействительный refresh-токен",
+				code="refresh_token_invalid",
+			)
+		
+		if not user.is_active:
+			raise ForbiddenError(
+				"Аккаунт заблокирован",
+				code="user_blocked",
+				resource="user",
+				resource_id=user.id,
+			)
+		
+		new_record, new_raw_token = await RefreshTokenService._create(session, user.id)
+		record.revoked_at = utcnow()
+		record.replaced_by_id = new_record.id
+		await session.flush()
+		
+		return user, new_raw_token
+	
+	@staticmethod
+	async def revoke(session: AsyncSession, raw_token: str) -> None:
+		"""Отзывает конкретный токен. Неизвестный токен игнорируется."""
+		stmt = select(RefreshToken).where(
+			RefreshToken.token_hash == RefreshTokenService.hash_token(raw_token)
+		)
+		record = (await session.execute(stmt)).scalar_one_or_none()
+		
+		if record and record.revoked_at is None:
+			record.revoked_at = utcnow()
+			await session.flush()
+	
+	@staticmethod
+	async def revoke_all_for_user(session: AsyncSession, user_id: int) -> None:
+		await session.execute(
+			update(RefreshToken)
+			.where(
+				RefreshToken.user_id == user_id,
+				RefreshToken.revoked_at.is_(None),
+			)
+			.values(revoked_at=utcnow())
+		)

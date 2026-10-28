@@ -9,9 +9,10 @@ from core.auth import create_access_token
 from core.errors import AuthenticationError, ForbiddenError, BusinessRuleError, NotFoundError
 from .models import User
 from .schemas import (
-	UserCreate, UserResponse, UserPublicResponse, Token, LoginRequest, UserUpdate
+	UserCreate, UserResponse, UserPublicResponse, Token, LoginRequest, UserUpdate,
+	RefreshRequest,
 )
-from .services import UserService
+from .services import UserService, RefreshTokenService
 from core.config import settings
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -28,6 +29,20 @@ async def register(
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 ):
 	return await UserService.create_user(session, user_data)
+
+
+def _token_response(user: User, refresh_token: str) -> dict:
+	access_token = create_access_token(
+		data={"user_id": user.id},
+		expires_delta=datetime.timedelta(minutes=settings.access_token_expire_minutes),
+	)
+	
+	return {
+		"access_token": access_token,
+		"refresh_token": refresh_token,
+		"token_type": "bearer",
+		"user": user,
+	}
 
 
 async def _create_login_response(session: AsyncSession, email: str, password: str):
@@ -47,17 +62,8 @@ async def _create_login_response(session: AsyncSession, email: str, password: st
 			resource_id=user.id,
 		)
 	
-	access_token_expires = datetime.timedelta(minutes=settings.access_token_expire_minutes)
-	access_token = create_access_token(
-		data={"user_id": user.id},
-		expires_delta=access_token_expires
-	)
-	
-	return {
-		"access_token": access_token,
-		"token_type": "bearer",
-		"user": user
-	}
+	refresh_token = await RefreshTokenService.issue(session, user.id)
+	return _token_response(user, refresh_token)
 
 
 @router.post(
@@ -90,6 +96,33 @@ async def login_json(
 	Принимает данные как JSON объект.
 	"""
 	return await _create_login_response(session, str(login_data.email), login_data.password)
+
+
+@router.post(
+	"/refresh",
+	response_model=Token,
+	summary="Обновление access-токена",
+	description="Обменивает refresh-токен на новую пару токенов (ротация)"
+)
+async def refresh_token(
+		data: RefreshRequest,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+):
+	user, refresh_token = await RefreshTokenService.rotate(session, data.refresh_token)
+	return _token_response(user, refresh_token)
+
+
+@router.post(
+	"/logout",
+	status_code=status.HTTP_204_NO_CONTENT,
+	summary="Выход",
+	description="Отзывает refresh-токен текущей сессии"
+)
+async def logout(
+		data: RefreshRequest,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+):
+	await RefreshTokenService.revoke(session, data.refresh_token)
 
 
 @router.get(

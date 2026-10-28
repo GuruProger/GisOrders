@@ -60,7 +60,9 @@ uv run uvicorn main:app --reload
 | `DB_URL` | DSN для asyncpg (`postgresql+asyncpg://...`) | обязательна |
 | `POSTGRES_*` | параметры контейнера Postgres | — |
 | `BACKEND_PORT` | порт приложения | `8000` |
-| `JWT_SECRET_KEY` | ключ подписи JWT | обязательна |
+| `JWT_SECRET_KEY` | ключ подписи JWT (минимум 32 символа) | обязательна |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | время жизни access-токена | `15` |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | время жизни refresh-токена | `30` |
 | `MAX_PROPOSALS_PER_DAY` | лимит откликов за 24 часа | `3` |
 | `CORS_ORIGINS` | JSON-массив источников | `["*"]` |
 | `CORS_ALLOW_CREDENTIALS` | credentialed CORS (для Bearer не нужен) | `false` |
@@ -71,7 +73,7 @@ uv run uvicorn main:app --reload
 
 | Группа | Маршруты |
 |---|---|
-| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin), `POST /users/{id}/block`, `POST /users/{id}/unblock` (admin) |
+| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `POST /users/refresh`, `POST /users/logout`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin), `POST /users/{id}/block`, `POST /users/{id}/unblock` (admin) |
 | Заказы | `POST /orders/`, `GET /orders/my`, `GET /orders/available`, `GET/PATCH/DELETE /orders/{id}`, `POST /orders/{id}/close` |
 | Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
@@ -79,6 +81,10 @@ uv run uvicorn main:app --reload
 ## Бизнес-правила
 
 Статусы заказа: `open → assigned → closed`, статусы отклика: `pending → accepted | rejected`.
+
+- `POST /users/login*` возвращает `access_token` (15 минут) и `refresh_token` (30 дней). Refresh-токен opaque, в БД хранится только его SHA-256.
+- `POST /users/refresh` ротирует refresh-токен: старый отзывается, выдаётся новый. Повторное использование отозванного токена считается компрометацией и отзывает все сессии пользователя.
+- `POST /users/logout` отзывает refresh-токен текущей сессии.
 
 - Исполнитель может отправить не больше `MAX_PROPOSALS_PER_DAY` откликов за скользящие 24 часа.
 - На один заказ — один отклик от исполнителя (защищено уникальным индексом); нельзя откликаться на свой или закрытый заказ.
