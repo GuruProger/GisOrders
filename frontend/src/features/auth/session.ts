@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiRequest } from '@/api/client'
+import { isAuthenticationError } from '@/api/errors'
 import { onSessionExpired, refreshSession } from '@/api/refresh'
 import { setAccessToken } from '@/api/token'
 import type { TokenPair, User } from '@/api/types'
@@ -47,10 +48,19 @@ async function restoreSession(): Promise<void> {
     await refreshSession()
     const { data } = await apiRequest<User>('/users/me')
     useSession.setState({ user: data, status: 'authenticated' })
-  } catch {
-    // A rejected refresh token means there is nothing to restore. Clearing the
-    // store also drops the storage entry and the in-memory access token.
-    useSession.getState().clear()
+  } catch (error) {
+    if (isAuthenticationError(error)) {
+      // Rejected credentials mean there is nothing to restore. Clearing the
+      // store also drops the storage entry and the in-memory access token.
+      useSession.getState().clear()
+      return
+    }
+
+    // Offline, timeout or 5xx: keep the refresh token so the session can be
+    // recovered. Treat the user as signed in without profile data so guarded
+    // routes render instead of redirecting to /login; the next API call will
+    // retry the refresh on its 401 path.
+    useSession.setState({ user: null, status: 'authenticated' })
   }
 }
 

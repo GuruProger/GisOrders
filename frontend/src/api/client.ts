@@ -1,10 +1,26 @@
 import { getRefreshToken } from '@/shared/lib/storage'
 import { parseError } from './errors'
-import { expireSession, isRefreshPath, refreshSession } from './refresh'
+import { expireSession, refreshSession } from './refresh'
 import { getAccessToken } from './token'
 import { apiUrl } from './url'
 
 const TIMEOUT_MS = 15_000
+
+/** Endpoints that must never trigger a refresh or expire an existing session. */
+const AUTH_PATHS = new Set([
+  '/users/login',
+  '/users/login/json',
+  '/users/register',
+  '/users/refresh',
+])
+
+function normalizePath(path: string): string {
+  return path.split('?')[0]?.replace(/\/+$/, '') ?? ''
+}
+
+export function isAuthPath(path: string): boolean {
+  return AUTH_PATHS.has(normalizePath(path))
+}
 
 export interface ApiResult<T> {
   data: T
@@ -55,12 +71,16 @@ export async function apiRequest<T>(
 ): Promise<ApiResult<T>> {
   const response = await send(path, init)
 
-  if (response.status !== 401 || isRefreshPath(path)) return readResponse<T>(response)
+  if (response.status !== 401 || isAuthPath(path)) return readResponse<T>(response)
 
-  // Without a refresh token there is nothing to renew: surface the 401 as is.
-  if (!getRefreshToken()) return readResponse<T>(response)
+  // Without a refresh token there is nothing to renew: the session is over.
+  if (!getRefreshToken()) {
+    expireSession()
+    throw await parseError(response)
+  }
 
-  // `refreshSession` is single-flight; its failures already expire the session.
+  // `refreshSession` is single-flight and only expires the session when the
+  // server rejects the credentials; transient failures propagate to the caller.
   await refreshSession()
 
   const retried = await send(path, init)

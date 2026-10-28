@@ -103,6 +103,71 @@ test('performs refresh inside a cross-tab lock', async () => {
   expect(request).toHaveBeenCalledWith('gisorders-refresh', expect.any(Function))
 })
 
+test('does not refresh or expire on a failed login', async () => {
+  localStorage.setItem('gisorders.refresh', 'existing-refresh')
+  const onExpired = vi.fn()
+  const unsubscribe = onSessionExpired(onExpired)
+  let refreshCalls = 0
+  server.use(
+    http.post('/api/v1/users/login/json', () =>
+      HttpResponse.json(
+        { detail: 'Неверный email или пароль', error_code: 'invalid_credentials' },
+        { status: 401 },
+      ),
+    ),
+    http.post('/api/v1/users/refresh', () => {
+      refreshCalls += 1
+      return HttpResponse.json({}, { status: 500 })
+    }),
+  )
+
+  await expect(
+    apiRequest('/users/login/json', { method: 'POST' }),
+  ).rejects.toMatchObject({ status: 401, code: 'invalid_credentials' })
+
+  expect(refreshCalls).toBe(0)
+  expect(onExpired).not.toHaveBeenCalled()
+  expect(localStorage.getItem('gisorders.refresh')).toBe('existing-refresh')
+  unsubscribe()
+})
+
+test('expires the session on a protected 401 when no refresh token is stored', async () => {
+  const onExpired = vi.fn()
+  const unsubscribe = onSessionExpired(onExpired)
+  server.use(
+    http.get('/api/v1/orders/1', () =>
+      HttpResponse.json(
+        { detail: 'Требуется авторизация', error_code: 'token_missing' },
+        { status: 401 },
+      ),
+    ),
+  )
+
+  await expect(apiRequest('/orders/1')).rejects.toMatchObject({ status: 401 })
+
+  expect(onExpired).toHaveBeenCalledTimes(1)
+  expect(localStorage.getItem('gisorders.refresh')).toBeNull()
+  unsubscribe()
+})
+
+test('keeps the session when refresh fails transiently', async () => {
+  localStorage.setItem('gisorders.refresh', 'refresh-1')
+  const onExpired = vi.fn()
+  const unsubscribe = onSessionExpired(onExpired)
+  server.use(
+    http.get('/api/v1/orders/1', () =>
+      HttpResponse.json({ detail: 'expired', error_code: 'token_expired' }, { status: 401 }),
+    ),
+    http.post('/api/v1/users/refresh', () => HttpResponse.error()),
+  )
+
+  await expect(apiRequest('/orders/1')).rejects.toThrow()
+
+  expect(onExpired).not.toHaveBeenCalled()
+  expect(localStorage.getItem('gisorders.refresh')).toBe('refresh-1')
+  unsubscribe()
+})
+
 test('parses X-Total-Count when present', async () => {
   server.use(
     http.get('/api/v1/orders/available', () =>

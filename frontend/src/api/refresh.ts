@@ -1,5 +1,5 @@
 import { getRefreshToken, setRefreshToken } from '@/shared/lib/storage'
-import { ApiError, parseError } from './errors'
+import { ApiError, isAuthenticationError, parseError } from './errors'
 import { setAccessToken } from './token'
 import type { TokenPair } from './types'
 import { apiUrl } from './url'
@@ -78,7 +78,10 @@ async function performRefresh(): Promise<TokenPair> {
     const locks = getLocks()
     return locks ? await locks.request(REFRESH_LOCK, run) : await run()
   } catch (error) {
-    expireSession()
+    // Only discard the session when the server says the credentials are bad.
+    // Offline, timeout and 5xx failures must keep the tokens so the user can
+    // retry once the network or the backend recovers.
+    if (isAuthenticationError(error)) expireSession()
     throw error
   }
 }
