@@ -8,9 +8,12 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from api import router as api_router
+from api.v1.ws.event_bus import event_bus
 from core.config import settings
 from core.database import db_helper
 from core.errors import ServiceUnavailableError, register_error_handlers
+from core.logging import configure_logging
+from core.middleware import RequestIDMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,13 @@ async def check_database() -> None:
 
 @asynccontextmanager
 async def lifespan(lifespan_app: FastAPI):
-    # Code to run before the application starts
-    yield
-    # Code to run after the application has finished
-    await db_helper.dispose()  # Закрываем соединение с бд
+    configure_logging()
+    await event_bus.start()
+    try:
+        yield
+    finally:
+        await event_bus.stop()
+        await db_helper.dispose()  # Закрываем соединение с бд
 
 app = FastAPI(lifespan=lifespan)
 
@@ -69,6 +75,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Добавляется последним, поэтому оборачивает и CORS-ответы (включая preflight).
+app.add_middleware(RequestIDMiddleware)
 
 
 if __name__ == "__main__":
