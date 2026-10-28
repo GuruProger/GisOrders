@@ -8,7 +8,7 @@ from core.errors import ForbiddenError, NotFoundError
 from core.security import get_current_active_user
 
 from ..users.models import User
-from ..ws.manager import manager
+from ..ws.event_bus import event_bus
 from .schemas import ChatResponse, ChatWithMessagesResponse, MessageCreate, MessageResponse
 from .services import ChatService, MessageService
 
@@ -151,7 +151,7 @@ async def send_message(
 	# Фиксируем сообщение до рассылки, чтобы клиенты не увидели событие,
 	# которого ещё нет в БД
 	await session.commit()
-	await manager.broadcast(chat_id, {
+	await event_bus.publish(chat_id, {
 		"type": "message.created",
 		"message": response.model_dump(mode="json"),
 	})
@@ -171,7 +171,7 @@ async def mark_as_read(
 ):
 	count = await MessageService.mark_messages_as_read(session, chat_id, current_user.id)
 	await session.commit()
-	await manager.broadcast(chat_id, {
+	await event_bus.publish(chat_id, {
 		"type": "message.read",
 		"chat_id": chat_id,
 		"user_id": current_user.id,

@@ -15,12 +15,13 @@ from core.errors import (
 	NotFoundError,
 	RateLimitError,
 )
-from core.rate_limit import SlidingWindowLimiter
+from core.rate_limit import RateLimiter, build_rate_limiter
 from core.security import get_current_active_user
 
 from .models import User
 from .schemas import (
 	LoginRequest,
+	PasswordChangeRequest,
 	RefreshRequest,
 	Token,
 	UserCreate,
@@ -32,11 +33,11 @@ from .services import RefreshTokenService, UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-login_limiter = SlidingWindowLimiter(
+login_limiter = build_rate_limiter(
 	limit=settings.login_rate_limit,
 	window_seconds=settings.login_rate_window_seconds,
 )
-register_limiter = SlidingWindowLimiter(
+register_limiter = build_rate_limiter(
 	limit=settings.register_rate_limit,
 	window_seconds=settings.register_rate_window_seconds,
 )
@@ -47,8 +48,8 @@ def _rate_limit_key(request: Request, scope: str, subject: str = "") -> str:
 	return f"{scope}:{host}:{subject}".rstrip(":")
 
 
-def _enforce_rate_limit(limiter: SlidingWindowLimiter, key: str) -> None:
-	allowed, retry_after = limiter.allow(key)
+async def _enforce_rate_limit(limiter: RateLimiter, key: str) -> None:
+	allowed, retry_after = await limiter.allow(key)
 	if not allowed:
 		raise RateLimitError(
 			"Слишком много попыток. Попробуйте позже",
@@ -68,7 +69,7 @@ async def register(
 		request: Request,
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 ):
-	_enforce_rate_limit(register_limiter, _rate_limit_key(request, "register"))
+	await _enforce_rate_limit(register_limiter, _rate_limit_key(request, "register"))
 	return await UserService.create_user(session, user_data)
 
 
@@ -121,7 +122,7 @@ async def login_form(
 	"""
 	Принимает данные как form-data (username/password).
 	"""
-	_enforce_rate_limit(
+	await _enforce_rate_limit(
 		login_limiter,
 		_rate_limit_key(request, "login", form_data.username),
 	)
@@ -142,7 +143,7 @@ async def login_json(
 	"""
 	Принимает данные как JSON объект.
 	"""
-	_enforce_rate_limit(
+	await _enforce_rate_limit(
 		login_limiter,
 		_rate_limit_key(request, "login", str(login_data.email)),
 	)
@@ -208,6 +209,28 @@ async def update_current_user(
 		update_dict.pop(field, None)
 	
 	return await UserService.update_user(session, current_user.id, update_dict)
+
+
+@router.post(
+	"/me/password",
+	status_code=status.HTTP_204_NO_CONTENT,
+	summary="Смена пароля",
+	description=(
+		"Меняет пароль текущего пользователя и отзывает все refresh-токены. "
+		"Ранее выданные access-токены действуют до истечения их короткого срока."
+	),
+)
+async def change_password(
+		data: PasswordChangeRequest,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	await UserService.change_password(
+		session,
+		current_user.id,
+		data.current_password,
+		data.new_password,
+	)
 
 
 @router.delete(

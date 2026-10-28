@@ -17,6 +17,7 @@ from core.errors import (
 from ..chat.models import Chat
 from ..chat.services import MessageService
 from ..users.models import User
+from .event_bus import event_bus
 from .manager import manager
 from .services import authenticate_websocket, get_chat_for_participant
 
@@ -88,7 +89,7 @@ async def _handle_event(
 		return
 	
 	if event_type == "typing":
-		await manager.broadcast(
+		await event_bus.publish(
 			chat.id,
 			{
 				"type": "typing",
@@ -103,7 +104,7 @@ async def _handle_event(
 	if event_type == "read":
 		count = await MessageService.mark_messages_as_read(session, chat.id, user.id)
 		await session.commit()
-		await manager.broadcast(
+		await event_bus.publish(
 			chat.id,
 			{
 				"type": "message.read",

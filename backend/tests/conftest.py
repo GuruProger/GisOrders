@@ -150,6 +150,7 @@ async def make_order(
     min_price: float | None = 1000.0,
     max_price: float | None = 5000.0,
     status: OrderStatus = OrderStatus.OPEN,
+    photos: list[str] | None = None,
 ) -> Order:
     order = Order(
         title=title,
@@ -165,6 +166,7 @@ async def make_order(
         tree_height=12.0,
         tree_diameter=35.0,
         customer_id=customer_id,
+        photos=photos,
     )
     db.add(order)
     await db.flush()

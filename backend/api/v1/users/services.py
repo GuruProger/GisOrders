@@ -3,7 +3,7 @@ import logging
 import secrets
 from datetime import timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -243,6 +243,33 @@ class UserService:
 		return user
 	
 	@staticmethod
+	async def change_password(
+			session: AsyncSession,
+			user_id: int,
+			current_password: str,
+			new_password: str,
+	) -> None:
+		user = await UserService.get_user_by_id(session, user_id)
+		if not user:
+			raise NotFoundError(
+				"Пользователь не найден",
+				resource="user",
+				resource_id=user_id,
+			)
+		
+		if not verify_password(current_password, str(user.hashed_password)):
+			raise AuthenticationError(
+				"Текущий пароль неверен",
+				code="invalid_password",
+			)
+		
+		user.hashed_password = get_password_hash(new_password)
+		# Пароль сменился — все ранее выданные refresh-токены недействительны.
+		# Access-токены доживут до конца своего короткого срока (15 минут).
+		await RefreshTokenService.revoke_all_for_user(session, user.id)
+		await session.flush()
+	
+	@staticmethod
 	async def delete_user(session: AsyncSession, user_id: int) -> None:
 		stmt = select(User).where(User.id == user_id)
 		result = await session.execute(stmt)
@@ -364,3 +391,13 @@ class RefreshTokenService:
 			)
 			.values(revoked_at=utcnow())
 		)
+	
+	@staticmethod
+	async def purge_expired(session: AsyncSession, now=None) -> int:
+		"""Удаляет истёкшие refresh-токены и возвращает их количество."""
+		result = await session.execute(
+			delete(RefreshToken).where(
+				RefreshToken.expires_at <= (now or utcnow())
+			)
+		)
+		return int(result.rowcount or 0)

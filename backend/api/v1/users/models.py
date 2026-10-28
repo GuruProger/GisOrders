@@ -73,7 +73,9 @@ class RefreshToken(Base):
 	created_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), default=utcnow, nullable=False
 	)
-	expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+	expires_at: Mapped[datetime] = mapped_column(
+		DateTime(timezone=True), index=True, nullable=False
+	)
 	revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 	
 	# Для расследования reuse: какой токен заменил этот

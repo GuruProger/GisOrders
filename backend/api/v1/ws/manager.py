@@ -38,10 +38,14 @@ class ConnectionManager:
 			chat_id: int,
 			event: dict,
 			exclude: WebSocket | None = None,
+			exclude_origin: int | None = None,
 	) -> None:
 		async with self._lock:
 			targets = [
-				ws for ws in self._connections.get(chat_id, ()) if ws is not exclude
+				ws
+				for ws in self._connections.get(chat_id, ())
+				if ws is not exclude
+				and (exclude_origin is None or id(ws) != exclude_origin)
 			]
 		
 		dead: list[WebSocket] = []

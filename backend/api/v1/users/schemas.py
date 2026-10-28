@@ -30,19 +30,22 @@ class UserBase(BaseModel):
 		return cleaned
 
 
+def validate_password_strength(value: str) -> str:
+	if len(value) < 8:
+		raise ValueError('Пароль должен содержать минимум 8 символов')
+	if not any(c.isupper() for c in value):
+		raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
+	if not any(c.isdigit() for c in value):
+		raise ValueError('Пароль должен содержать хотя бы одну цифру')
+	return value
+
+
 class UserCreate(UserBase):
 	password: str = Field(..., min_length=8)
 	
 	@field_validator('password')
 	def password_strength(cls, v: str) -> str:
-		if len(v) < 8:
-			raise ValueError('Пароль должен содержать минимум 8 символов')
-		# Можно добавить дополнительную проверку сложности
-		if not any(c.isupper() for c in v):
-			raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
-		if not any(c.isdigit() for c in v):
-			raise ValueError('Пароль должен содержать хотя бы одну цифру')
-		return v
+		return validate_password_strength(v)
 
 
 class UserUpdate(BaseModel):
@@ -99,3 +102,12 @@ class Token(BaseModel):
 
 class RefreshRequest(BaseModel):
 	refresh_token: str = Field(..., min_length=16)
+
+
+class PasswordChangeRequest(BaseModel):
+	current_password: str = Field(..., min_length=1)
+	new_password: str = Field(..., min_length=8)
+	
+	@field_validator('new_password')
+	def password_strength(cls, v: str) -> str:
+		return validate_password_strength(v)

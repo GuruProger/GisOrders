@@ -66,7 +66,15 @@ class Settings(BaseSettings):
 	# Бизнес-логика
 	max_proposals_per_day: int = 3
 	
-	# Rate limiting (in-memory: действует в пределах одного процесса)
+	# Redis: общий rate limiting и WebSocket pub/sub для нескольких воркеров.
+	# Если не задан, используется in-memory fallback (один процесс).
+	redis_url: str | None = Field(default=None, alias="REDIS_URL")
+	
+	# Логирование
+	log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+	log_json: bool = Field(default=False, alias="LOG_JSON")
+	
+	# Rate limiting
 	login_rate_limit: int = 10
 	login_rate_window_seconds: int = 60
 	register_rate_limit: int = 5
