@@ -51,6 +51,12 @@ class Settings(BaseSettings):
 	# Бизнес-логика
 	max_proposals_per_day: int = 3
 	
+	# Rate limiting (in-memory: действует в пределах одного процесса)
+	login_rate_limit: int = 10
+	login_rate_window_seconds: int = 60
+	register_rate_limit: int = 5
+	register_rate_window_seconds: int = 3600
+	
 	# CORS
 	# API аутентифицируется Bearer-токеном, поэтому credentialed-запросы не нужны:
 	# wildcard-origin вместе с allow_credentials=True небезопасен.

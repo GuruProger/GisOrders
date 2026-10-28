@@ -83,6 +83,18 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    """Лимиты живут в памяти процесса - сбрасываем их между тестами."""
+    from api.v1.users.routers import login_limiter, register_limiter
+
+    login_limiter.reset()
+    register_limiter.reset()
+    yield
+    login_limiter.reset()
+    register_limiter.reset()
+
+
 @pytest_asyncio.fixture
 async def current_user_override(executor: User):
     """

@@ -81,6 +81,12 @@ class ProposalLimitError(AppError):
 	default_code = "daily_proposal_limit"
 
 
+class RateLimitError(AppError):
+	status_code = status.HTTP_429_TOO_MANY_REQUESTS
+	default_detail = "Слишком много запросов. Попробуйте позже"
+	default_code = "rate_limited"
+
+
 class BusinessRuleError(AppError):
 	"""
 	Ошибка бизнес-правила.

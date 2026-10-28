@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
@@ -6,7 +6,11 @@ import datetime
 from core.database import db_helper
 from core.security import get_current_user, get_current_active_user
 from core.auth import create_access_token
-from core.errors import AuthenticationError, ForbiddenError, BusinessRuleError, NotFoundError
+from core.errors import (
+	AuthenticationError, ForbiddenError, BusinessRuleError, NotFoundError,
+	RateLimitError,
+)
+from core.rate_limit import SlidingWindowLimiter
 from .models import User
 from .schemas import (
 	UserCreate, UserResponse, UserPublicResponse, Token, LoginRequest, UserUpdate,
@@ -17,6 +21,30 @@ from core.config import settings
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+login_limiter = SlidingWindowLimiter(
+	limit=settings.login_rate_limit,
+	window_seconds=settings.login_rate_window_seconds,
+)
+register_limiter = SlidingWindowLimiter(
+	limit=settings.register_rate_limit,
+	window_seconds=settings.register_rate_window_seconds,
+)
+
+
+def _rate_limit_key(request: Request, scope: str, subject: str = "") -> str:
+	host = request.client.host if request.client else "unknown"
+	return f"{scope}:{host}:{subject}".rstrip(":")
+
+
+def _enforce_rate_limit(limiter: SlidingWindowLimiter, key: str) -> None:
+	allowed, retry_after = limiter.allow(key)
+	if not allowed:
+		raise RateLimitError(
+			"Слишком много попыток. Попробуйте позже",
+			code="rate_limited",
+			headers={"Retry-After": str(retry_after)},
+		)
+
 
 @router.post(
 	"/register",
@@ -26,8 +54,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 )
 async def register(
 		user_data: UserCreate,
+		request: Request,
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 ):
+	_enforce_rate_limit(register_limiter, _rate_limit_key(request, "register"))
 	return await UserService.create_user(session, user_data)
 
 
@@ -73,12 +103,17 @@ async def _create_login_response(session: AsyncSession, email: str, password: st
 	description="Стандартный вход для Swagger и OAuth2 клиентов"
 )
 async def login_form(
+		request: Request,
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		form_data: OAuth2PasswordRequestForm = Depends(),
 ):
 	"""
 	Принимает данные как form-data (username/password).
 	"""
+	_enforce_rate_limit(
+		login_limiter,
+		_rate_limit_key(request, "login", form_data.username),
+	)
 	return await _create_login_response(session, form_data.username, form_data.password)
 
 
@@ -89,12 +124,17 @@ async def login_form(
 	description="Вход для клиентов, отправляющих JSON"
 )
 async def login_json(
-		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		login_data: LoginRequest,
+		request: Request,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 ):
 	"""
 	Принимает данные как JSON объект.
 	"""
+	_enforce_rate_limit(
+		login_limiter,
+		_rate_limit_key(request, "login", str(login_data.email)),
+	)
 	return await _create_login_response(session, str(login_data.email), login_data.password)
 
 

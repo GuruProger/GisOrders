@@ -63,6 +63,8 @@ uv run uvicorn main:app --reload
 | `JWT_SECRET_KEY` | ключ подписи JWT (минимум 32 символа) | обязательна |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | время жизни access-токена | `15` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | время жизни refresh-токена | `30` |
+| `LOGIN_RATE_LIMIT` / `LOGIN_RATE_WINDOW_SECONDS` | попытки входа на IP+email | `10` / `60` |
+| `REGISTER_RATE_LIMIT` / `REGISTER_RATE_WINDOW_SECONDS` | регистрации на IP | `5` / `3600` |
 | `MAX_PROPOSALS_PER_DAY` | лимит откликов за 24 часа | `3` |
 | `CORS_ORIGINS` | JSON-массив источников | `["*"]` |
 | `CORS_ALLOW_CREDENTIALS` | credentialed CORS (для Bearer не нужен) | `false` |
@@ -85,6 +87,7 @@ uv run uvicorn main:app --reload
 - `POST /users/login*` возвращает `access_token` (15 минут) и `refresh_token` (30 дней). Refresh-токен opaque, в БД хранится только его SHA-256.
 - `POST /users/refresh` ротирует refresh-токен: старый отзывается, выдаётся новый. Повторное использование отозванного токена считается компрометацией и отзывает все сессии пользователя.
 - `POST /users/logout` отзывает refresh-токен текущей сессии.
+- Вход и регистрация ограничены по частоте (in-memory, на один процесс uvicorn): попытки входа — на IP+email, регистрации — на IP. Ответ `429` содержит `Retry-After`.
 
 - Исполнитель может отправить не больше `MAX_PROPOSALS_PER_DAY` откликов за скользящие 24 часа.
 - На один заказ — один отклик от исполнителя (защищено уникальным индексом); нельзя откликаться на свой или закрытый заказ.
