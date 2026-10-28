@@ -1,0 +1,40 @@
+{
+  "name": "gisorders-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5",
+    "date-fns": "^4",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-hook-form": "^7",
+    "react-router": "^7",
+    "zod": "^4",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "jsdom": "^26",
+    "msw": "^2",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^7",
+    "vite-plugin-pwa": "^1",
+    "vitest": "^3"
+  }
+}

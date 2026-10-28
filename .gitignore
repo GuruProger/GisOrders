@@ -194,3 +194,6 @@ pytest.ini
 
 # Загруженные пользователями изображения
 backend/media/
+
+# Frontend (vitest coverage; node_modules/dist already covered above)
+frontend/coverage/
