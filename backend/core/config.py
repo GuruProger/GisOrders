@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 	access_token_expire_minutes: int = 30
 	
 	# Бизнес-логика
-	max_chats_per_day: int = 3
+	max_proposals_per_day: int = 3
 	
 	# CORS
 	# API аутентифицируется Bearer-токеном, поэтому credentialed-запросы не нужны:

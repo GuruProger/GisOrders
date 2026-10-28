@@ -355,9 +355,9 @@ class OrderProposalService:
 		daily_count_result = await session.execute(daily_count_stmt)
 		daily_count = daily_count_result.scalar()
 		
-		if daily_count >= settings.max_chats_per_day:
+		if daily_count >= settings.max_proposals_per_day:
 			raise ProposalLimitError(
-				f"Превышен лимит откликов за день. Максимум {settings.max_chats_per_day} откликов в сутки",
+				f"Превышен лимит откликов за день. Максимум {settings.max_proposals_per_day} откликов в сутки",
 				code="daily_proposal_limit",
 				resource="proposal",
 			)

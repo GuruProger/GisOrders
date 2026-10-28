@@ -13,7 +13,7 @@ PROPOSALS_API = "/api/v1/orders/{order_id}/proposals"
 DELETE_PROPOSAL_API = "/api/v1/orders/proposals/{proposal_id}"
 
 # Дневной лимит откликов для исполнителя (берём из конфига)
-DAILY_LIMIT = settings.max_chats_per_day
+DAILY_LIMIT = settings.max_proposals_per_day
 
 
 async def create_multiple_orders(db, customer, count: int) -> list[Order]:
