@@ -1,14 +1,9 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Optional, List
-from enum import Enum
 
 from core.time import as_utc, utcnow
-
-
-class OrderStatus(str, Enum):
-	OPEN = "open"
-	CLOSED = "closed"
+from .models import OrderStatus
 
 
 # Базовые схемы для Order
