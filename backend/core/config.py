@@ -28,11 +28,10 @@ class Settings(BaseSettings):
 	max_chats_per_day: int = 3
 	
 	# CORS
-	cors_origins: list[str] = [
-		"http://localhost:3000",
-		"http://127.0.0.1:3000",
-		"*"
-	]
+	# API аутентифицируется Bearer-токеном, поэтому credentialed-запросы не нужны:
+	# wildcard-origin вместе с allow_credentials=True небезопасен.
+	cors_origins: list[str] = ["*"]
+	cors_allow_credentials: bool = False
 	
 	# Настройки чтения переменных окружения
 	model_config = SettingsConfigDict(
