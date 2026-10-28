@@ -10,7 +10,7 @@
 - SQLAlchemy 2.0 (async) + asyncpg
 - PostgreSQL + PostGIS (GeoAlchemy2, Shapely)
 - Alembic, Pydantic v2 + pydantic-settings
-- JWT (python-jose), bcrypt (passlib)
+- JWT (python-jose), bcrypt
 - pytest + httpx, uv
 
 ## Структура
@@ -22,7 +22,9 @@ backend/
 ├── api/v1/
 │   ├── users/               # регистрация, вход, профиль
 │   ├── orders/              # заказы и отклики
-│   └── chat/                # чаты и сообщения
+│   ├── chat/                # чаты и сообщения
+│   ├── uploads/             # загрузка изображений
+│   └── ws/                  # WebSocket-события чатов
 ├── alembic/versions/        # миграции
 └── tests/                   # pytest: фикстуры и интеграционные тесты
 ```
@@ -36,8 +38,8 @@ backend/
 cp .env.example .env          # заполнить POSTGRES_* и JWT_SECRET_KEY
 docker compose up -d --build  # postgres + backend
 
-# миграции и запуск приложения
-docker compose exec backend uv run alembic upgrade head
+# миграции выполняются автоматически в entrypoint контейнера
+curl http://localhost:8000/health
 ```
 
 API будет доступен на `http://localhost:8000`, OpenAPI — на `/docs`.
@@ -94,6 +96,7 @@ uv run python scripts/create_admin.py --email admin@example.com
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
 | Загрузки | `POST /uploads/images` (multipart `file`); файлы отдаются с `/media/...` |
 | Realtime | `WS /ws/chats/{chat_id}` (авторизация первым кадром) |
+| Система | `GET /health` — вне `/api/v1`, проверяет соединение с БД |
 
 ## Realtime
 
@@ -147,7 +150,14 @@ uv run python scripts/create_admin.py --email admin@example.com
 
 ```bash
 cd backend
-uv run pytest
+uv run pytest --cov=api --cov=core --cov-report=term-missing
+uv run ruff check .
+```
+
+Линтер и проверка YAML также запускаются через pre-commit:
+
+```bash
+pre-commit install   # один раз после клонирования
 ```
 
 ## Миграции
@@ -156,4 +166,5 @@ uv run pytest
 cd backend
 uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "change description"
+uv run alembic check   # нет ли расхождений между моделями и БД
 ```
