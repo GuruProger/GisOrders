@@ -13,6 +13,11 @@ services:
     volumes:
       - ./backend/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - gis-network
 
@@ -27,7 +32,14 @@ services:
     environment:
       - DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-gis-orders:${POSTGRES_PORT}/${POSTGRES_DB}
     depends_on:
-      - postgres_db
+      postgres_db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${BACKEND_PORT}/health', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     env_file:
       - ./.env
     networks:
