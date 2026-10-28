@@ -756,7 +756,7 @@ git commit -m "feat(frontend): add order create and edit with photos and map poi
   - `nextReconnectDelay(attempt: number): number` — 1000 мс × 2^attempt, потолок 30 000, джиттер ±20 %
   - `groupMessagesByDay(messages: Message[]): Array<{ day: string; messages: Message[] }>`
   - `createChatSocket(options: { chatId: number; getToken(): string | null; onEvent(event: ChatEvent): void; onStatus(status: 'online' | 'offline'): void }): { close(): void }`
-  - `type ChatEvent = { type: 'message.created'; message: Message } | { type: 'message.read'; message_id: number } | { type: 'typing'; user_id: number }`
+  - `type ChatEvent = { type: 'message.created'; message: Message } | { type: 'message.read'; message_id: number } | { type: 'typing'; user_id: number; is_typing: boolean }`
 
 - [ ] **Step 1: Написать падающие тесты**
 
@@ -793,9 +793,9 @@ Expected: FAIL.
 
 `chats.ts` — методы из интерфейсов выше.
 
-`socket.ts`: `new WebSocket(`${WS_BASE}/ws/chats/${chatId}`)`; первый кадр `{"type":"auth","token":getToken()}`; на `close` — переподключение через `nextReconnectDelay` с джиттером; на `open` — `onStatus('online')` и повторная авторизация; при истечении access (`4401` или событие `session-expired`) — обновление токена и переподключение; `close()` отменяет таймеры.
+`socket.ts`: `new WebSocket(`${WS_BASE}/ws/chats/${chatId}`)`, где `WS_BASE` = `VITE_WS_URL` или `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1`; первый кадр `{"type":"auth","token":getToken()}`; сервер отвечает `{"type":"auth.ok"}`; на `close` — переподключение через `nextReconnectDelay` с джиттером; на `open` — `onStatus('online')` и повторная авторизация; коды закрытия `4401`/`4403`/`4404` означают отказ авторизации/доступа — при `4401` обновить токен и переподключиться, при `4403`/`4404` не переподключаться и показать ошибку; `close()` отменяет таймеры.
 
-`WS_BASE` — из `VITE_WS_URL` или `location.origin` с заменой схемы на `ws`.
+`WS_BASE` — из `VITE_WS_URL` (если задан) или из `location.origin` с заменой схемы на `ws` и обязательным префиксом `/api/v1` (эндпоинт — `/api/v1/ws/chats/{id}`).
 
 - [ ] **Step 4: Реализовать экраны**
 
