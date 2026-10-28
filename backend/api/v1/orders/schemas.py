@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from core.time import as_utc, utcnow
 
 from .models import OrderStatus, ProposalStatus
+from .normalization import normalize_tree_type
 
 
 # Базовые схемы для Order
@@ -20,6 +21,10 @@ class OrderBase(BaseModel):
 	tree_height: float = Field(..., gt=0)
 	tree_diameter: float = Field(..., gt=0)
 	photos: Optional[List[str]] = None
+	
+	@field_validator('tree_type')
+	def normalize_tree_type_value(cls, v: str) -> str:
+		return normalize_tree_type(v)
 	
 	@field_validator('max_price')
 	def validate_prices(cls, v, values):
@@ -79,6 +84,12 @@ class OrderUpdate(BaseModel):
 			if v < values.data['min_price']:
 				raise ValueError('max_price должен быть больше или равен min_price')
 		return v
+	
+	@field_validator('tree_type')
+	def normalize_tree_type_value(cls, v: Optional[str]) -> Optional[str]:
+		if v is None:
+			return None
+		return normalize_tree_type(v)
 
 
 class OrderResponse(BaseModel):

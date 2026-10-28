@@ -15,6 +15,7 @@ from core.errors import BusinessRuleError, ConflictError, ForbiddenError, NotFou
 from core.time import utcnow
 
 from .models import Order, OrderProposal, OrderStatus, ProposalStatus
+from .normalization import normalize_tree_type
 from .schemas import OrderCreate, OrderFilters, OrderProposalCreate
 
 logger = logging.getLogger(__name__)
@@ -126,7 +127,10 @@ class OrderService:
 
 		# Фильтрация по типу дерева
 		if filters.tree_type:
-			conditions.append(Order.tree_type.ilike(f"%{filters.tree_type}%"))
+			conditions.append(
+				func.replace(func.lower(func.trim(Order.tree_type)), "ё", "е")
+				== normalize_tree_type(filters.tree_type)
+			)
 
 		# Поиск по названию и описанию (регистронезависимый, спецсимволы LIKE буквальны)
 		if filters.search and filters.search.strip():
