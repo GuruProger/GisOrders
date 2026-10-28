@@ -220,7 +220,7 @@ class MessageService:
 		"""Получение сообщений чата с пагинацией"""
 		stmt = select(Message).where(
 			Message.chat_id == chat_id
-		).order_by(desc(Message.created_at)).limit(limit).offset(offset)
+		).order_by(desc(Message.created_at), desc(Message.id)).limit(limit).offset(offset)
 		
 		result = await session.execute(stmt)
 		return result.scalars().all()
