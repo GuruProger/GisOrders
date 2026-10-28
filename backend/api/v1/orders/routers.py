@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import db_helper
@@ -61,6 +61,7 @@ async def get_my_orders(
 	description="Получение списка заказов, доступных для отправки предложений"
 )
 async def get_available_orders(
+		response: Response,
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 		radius_km: Optional[int] = Query(10, ge=1, le=50, description="Радиус поиска в км"),
@@ -91,6 +92,8 @@ async def get_available_orders(
 		sort_by=sort_by,
 		sort_order=sort_order
 	)
+	total = await OrderService.count_available_orders(session, current_user.id, filters)
+	response.headers["X-Total-Count"] = str(total)
 	return await OrderService.get_available_orders(session, current_user.id, filters)
 
 

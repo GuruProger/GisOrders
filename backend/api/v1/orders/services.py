@@ -71,76 +71,87 @@ class OrderService:
 			stmt = stmt.where(Order.status == status)
 		stmt = stmt.order_by(Order.created_at.desc())
 		result = await session.execute(stmt)
-		return result.scalars().all()
+		orders = list(result.scalars().all())
+		await OrderService._attach_proposals_count(session, orders)
+		return orders
 	
 	@staticmethod
-	async def get_available_orders(
-			session: AsyncSession,
-			executor_id: int,
-			filters: OrderFilters
-	) -> Sequence[Order]:
+	def _available_conditions(executor_id: int, filters: OrderFilters) -> list:
+		"""Возвращает список условий WHERE для доступных заказов (без order_by и пагинации)."""
+		conditions = []
+
 		# Базовый запрос - только OPEN заказы
-		stmt = select(Order).where(Order.status == OrderStatus.OPEN)
-		
+		conditions.append(Order.status == OrderStatus.OPEN)
+
 		# Исключаем заказы, у которых дедлайн уже прошел
-		stmt = stmt.where(Order.deadline >= utcnow())
-		
+		conditions.append(Order.deadline >= utcnow())
+
 		# Исключить собственные заказы
-		stmt = stmt.where(Order.customer_id != executor_id)
-		
+		conditions.append(Order.customer_id != executor_id)
+
 		# Исключить заказы, к которым уже есть предложение от этого исполнителя
 		subquery = select(OrderProposal.order_id).where(
 			OrderProposal.executor_id == executor_id
 		)
-		stmt = stmt.where(Order.id.not_in(subquery))
-		
+		conditions.append(Order.id.not_in(subquery))
+
 		# Гео-фильтрация: координаты обязательны, поэтому фильтр применяется всегда
 		user_point = ST_SetSRID(ST_Point(filters.user_lon, filters.user_lat), 4326)
 		# Конвертируем geometry в geography для работы в метрах
 		# И используем радиус в метрах (km * 1000)
-		stmt = stmt.where(
+		conditions.append(
 			ST_DWithin(
 				Order.location.cast(Geography),
 				user_point.cast(Geography),
 				filters.radius_km * 1000,
 			)
 		)
-		
+
 		# Фильтрация по цене: сравниваем нижнюю границу бюджета заказа с min_price,
 		# а верхнюю - с max_price. NULL означает отсутствие ограничения.
 		if filters.min_price is not None:
-			stmt = stmt.where(
+			conditions.append(
 				or_(
 					Order.min_price >= filters.min_price,
 					Order.min_price.is_(None)
 				)
 			)
 		if filters.max_price is not None:
-			stmt = stmt.where(
+			conditions.append(
 				or_(
 					Order.max_price <= filters.max_price,
 					Order.max_price.is_(None)
 				)
 			)
-		
+
 		# Фильтрация по типу дерева
 		if filters.tree_type:
-			stmt = stmt.where(Order.tree_type.ilike(f"%{filters.tree_type}%"))
-		
+			conditions.append(Order.tree_type.ilike(f"%{filters.tree_type}%"))
+
 		# Поиск по названию и описанию (регистронезависимый, спецсимволы LIKE буквальны)
 		if filters.search and filters.search.strip():
 			pattern = f"%{_escape_like(filters.search.strip())}%"
-			stmt = stmt.where(
+			conditions.append(
 				or_(
 					Order.title.ilike(pattern, escape="\\"),
 					Order.description.ilike(pattern, escape="\\"),
 				)
 			)
-		
+
 		# Фильтрация по высоте дерева
 		if filters.max_height:
-			stmt = stmt.where(Order.tree_height <= filters.max_height)
-		
+			conditions.append(Order.tree_height <= filters.max_height)
+
+		return conditions
+
+	@staticmethod
+	async def get_available_orders(
+			session: AsyncSession,
+			executor_id: int,
+			filters: OrderFilters
+	) -> Sequence[Order]:
+		stmt = select(Order).where(*OrderService._available_conditions(executor_id, filters))
+
 		# Сортировка
 		if filters.sort_by == "deadline":
 			order_by = Order.deadline
@@ -148,25 +159,53 @@ class OrderService:
 			order_by = Order.min_price
 		else:
 			order_by = Order.created_at
-		
+
 		if filters.sort_order == "asc":
 			stmt = stmt.order_by(order_by.asc())
 		else:
 			stmt = stmt.order_by(order_by.desc())
-		
+
 		# Пагинация
 		stmt = stmt.offset((filters.page - 1) * filters.per_page)
 		stmt = stmt.limit(filters.per_page)
-		
+
 		result = await session.execute(stmt)
-		orders = result.scalars().all()
+		orders = list(result.scalars().all())
+		await OrderService._attach_proposals_count(session, orders)
 		return orders
+
+	@staticmethod
+	async def count_available_orders(session: AsyncSession, executor_id: int, filters: OrderFilters) -> int:
+		"""Считает общее число доступных заказов по тем же условиям, что и список."""
+		stmt = select(func.count(Order.id)).where(*OrderService._available_conditions(executor_id, filters))
+		return int((await session.execute(stmt)).scalar_one())
+
+	@staticmethod
+	async def _attach_proposals_count(session: AsyncSession, orders: Sequence[Order]) -> None:
+		"""Проставляет orders[i].proposals_count — число откликов в статусе pending."""
+		order_ids = [order.id for order in orders]
+		if not order_ids:
+			return
+		stmt = (
+			select(OrderProposal.order_id, func.count(OrderProposal.id))
+			.where(
+				OrderProposal.order_id.in_(order_ids),
+				OrderProposal.status == ProposalStatus.PENDING,
+			)
+			.group_by(OrderProposal.order_id)
+		)
+		counts = dict((await session.execute(stmt)).all())
+		for order in orders:
+			order.proposals_count = counts.get(order.id, 0)
 	
 	@staticmethod
 	async def get_order_by_id(session: AsyncSession, order_id: int) -> Optional[Order]:
 		stmt = select(Order).where(Order.id == order_id)
 		result = await session.execute(stmt)
-		return result.scalar_one_or_none()
+		order = result.scalar_one_or_none()
+		if order is not None:
+			await OrderService._attach_proposals_count(session, [order])
+		return order
 	
 	@staticmethod
 	async def update_order(
@@ -218,6 +257,7 @@ class OrderService:
 		try:
 			await session.flush()
 			await session.refresh(order)
+			await OrderService._attach_proposals_count(session, [order])
 			return order
 		except IntegrityError as e:
 			logger.error("IntegrityError in update_order", exc_info=e)
@@ -268,6 +308,7 @@ class OrderService:
 		try:
 			await session.flush()
 			await session.refresh(order)
+			await OrderService._attach_proposals_count(session, [order])
 			return order
 		except IntegrityError as e:
 			logger.error("IntegrityError in close_order", exc_info=e)

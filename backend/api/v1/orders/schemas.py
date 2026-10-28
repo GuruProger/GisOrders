@@ -100,6 +100,7 @@ class OrderResponse(BaseModel):
 	accepted_proposal_id: Optional[int] = None
 	lat: float
 	lon: float
+	proposals_count: int = 0
 	
 	model_config = ConfigDict(from_attributes=True)
 
