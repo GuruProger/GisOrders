@@ -1,3 +1,11 @@
+import { RouterProvider } from 'react-router'
+import { AppProviders } from './providers'
+import { router } from './router'
+
 export function App() {
-  return <h1>GisOrders</h1>
+  return (
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
+  )
 }
