@@ -1,18 +1,20 @@
-from typing import List, TYPE_CHECKING, Optional
-from geoalchemy2 import Geometry
-from geoalchemy2.shape import to_shape
-from sqlalchemy import String, Text, DateTime, Float, Integer, Enum as SQLEnum, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import ARRAY
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING, List, Optional
+
+from geoalchemy2 import Geometry
+from geoalchemy2.shape import to_shape
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
 from core.time import utcnow
 
 if TYPE_CHECKING:
-	from ..users.models import User
 	from ..chat.models import Chat
+	from ..users.models import User
 
 
 class OrderStatus(str, Enum):
@@ -61,7 +63,10 @@ class Order(Base):
 	photos: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)  # Массив URL фото
 	
 	# Внешние ключи
-	customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))  # Заказчик
+	customer_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+	)  # Заказчик
 	accepted_proposal_id: Mapped[Optional[int]] = mapped_column(
 		Integer,
 		ForeignKey(
@@ -144,8 +149,14 @@ class OrderProposal(Base):
 	)
 	
 	# Внешние ключи
-	order_id: Mapped[int] = mapped_column(Integer, ForeignKey("order.id"))
-	executor_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))
+	order_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("order.id", ondelete="CASCADE"),
+	)
+	executor_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+	)
 	
 	# Связи
 	order: Mapped["Order"] = relationship(

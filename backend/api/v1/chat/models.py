@@ -1,11 +1,12 @@
-from typing import List, TYPE_CHECKING
-from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, Boolean, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
+from typing import TYPE_CHECKING, List
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
-	from ..users.models import User
 	from ..orders.models import Order, OrderProposal
+	from ..users.models import User
 
 from core.database import Base
 
@@ -27,9 +28,24 @@ class Chat(Base):
 	)
 	
 	# Внешние ключи
-	order_id: Mapped[int] = mapped_column(Integer, ForeignKey("order.id"), nullable=False)
-	customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
-	executor_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
+	order_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("order.id", ondelete="CASCADE"),
+		nullable=False,
+		index=True,
+	)
+	customer_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+		nullable=False,
+		index=True,
+	)
+	executor_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+		nullable=False,
+		index=True,
+	)
 	proposal_id: Mapped[int] = mapped_column(
 		Integer,
 		ForeignKey("order_proposal.id", ondelete="SET NULL"),
@@ -58,12 +74,21 @@ class Message(Base):
 	
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
-		DateTime(timezone=True), server_default=func.now(), nullable=False
+		DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
 	)
 	
 	# Внешние ключи
-	chat_id: Mapped[int] = mapped_column(Integer, ForeignKey("chat.id"), nullable=False)
-	sender_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
+	chat_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("chat.id", ondelete="CASCADE"),
+		nullable=False,
+		index=True,
+	)
+	sender_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("user.id", ondelete="CASCADE"),
+		nullable=False,
+	)
 	
 	# Связи
 	chat: Mapped["Chat"] = relationship("Chat", back_populates="messages")
