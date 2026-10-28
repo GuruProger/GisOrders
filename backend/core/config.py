@@ -1,10 +1,22 @@
 from pathlib import Path
 from functools import lru_cache
 
-from pydantic import Field, PostgresDsn
+from pydantic import Field, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Значения, которые слишком часто оставляют в примерах и локальных конфигах
+INSECURE_JWT_SECRETS = {
+	"key",
+	"secret",
+	"changeme",
+	"password",
+	"test",
+	"jwt_secret_key",
+	"change-me-use-a-random-64-character-secret-value",
+}
+MIN_JWT_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -23,6 +35,17 @@ class Settings(BaseSettings):
 	jwt_secret_key: str = Field(alias="JWT_SECRET_KEY")
 	jwt_algorithm: str = "HS256"
 	access_token_expire_minutes: int = 30
+	
+	@field_validator("jwt_secret_key")
+	@classmethod
+	def validate_jwt_secret_key(cls, value: str) -> str:
+		if len(value) < MIN_JWT_SECRET_LENGTH:
+			raise ValueError(
+				f"JWT_SECRET_KEY должен быть не короче {MIN_JWT_SECRET_LENGTH} символов"
+			)
+		if value.strip().lower() in INSECURE_JWT_SECRETS:
+			raise ValueError("JWT_SECRET_KEY содержит небезопасное значение")
+		return value
 	
 	# Бизнес-логика
 	max_proposals_per_day: int = 3
