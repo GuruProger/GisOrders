@@ -11,6 +11,7 @@
 - PostgreSQL + PostGIS (GeoAlchemy2, Shapely)
 - Alembic, Pydantic v2 + pydantic-settings
 - JWT (python-jose), bcrypt
+- Redis (rate limiting, WebSocket pub/sub) — опционально
 - pytest + httpx, uv
 
 ## Структура
@@ -46,6 +47,20 @@ API будет доступен на `http://localhost:8000`, OpenAPI — на `
 При первом создании тома Postgres скрипт `backend/init-db.sh` создаёт
 тестовую БД `gisorders_test` с расширением PostGIS.
 
+### Production
+
+Отдельный образ без dev-зависимостей и `--reload`, non-root пользователь,
+два воркера uvicorn, Redis для общих лимитов и WebSocket-событий:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.prod.yml up -d --build
+curl http://localhost:8000/health
+```
+
+Миграции применяются автоматически при старте контейнера. В production
+включён JSON-формат логов (`LOG_JSON=true`), а `REDIS_URL` задаётся compose-файлом.
+
 ## Локальный запуск
 
 ```bash
@@ -75,8 +90,11 @@ uv run python scripts/create_admin.py --email admin@example.com
 | `JWT_SECRET_KEY` | ключ подписи JWT (минимум 32 символа) | обязательна |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | время жизни access-токена | `15` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | время жизни refresh-токена | `30` |
+| `REDIS_URL` | Redis для общих лимитов и WebSocket pub/sub | не задан (in-memory) |
 | `LOGIN_RATE_LIMIT` / `LOGIN_RATE_WINDOW_SECONDS` | попытки входа на IP+email | `10` / `60` |
 | `REGISTER_RATE_LIMIT` / `REGISTER_RATE_WINDOW_SECONDS` | регистрации на IP | `5` / `3600` |
+| `LOG_LEVEL` | минимальный уровень логов | `INFO` |
+| `LOG_JSON` | писать логи одной JSON-строкой | `false` |
 | `WS_AUTH_TIMEOUT_SECONDS` | ожидание кадра авторизации WebSocket | `10` |
 | `MAX_PROPOSALS_PER_DAY` | лимит откликов за 24 часа | `3` |
 | `MEDIA_ROOT` | каталог для загруженных изображений | `backend/media` |
@@ -90,7 +108,7 @@ uv run python scripts/create_admin.py --email admin@example.com
 
 | Группа | Маршруты |
 |---|---|
-| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `POST /users/refresh`, `POST /users/logout`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin), `POST /users/{id}/block`, `POST /users/{id}/unblock` (admin) |
+| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `POST /users/refresh`, `POST /users/logout`, `GET/PATCH/DELETE /users/me`, `POST /users/me/password`, `GET /users/{id}`, `DELETE /users/{id}` (admin), `POST /users/{id}/block`, `POST /users/{id}/unblock` (admin) |
 | Заказы | `POST /orders/`, `GET /orders/my`, `GET /orders/available`, `GET/PATCH/DELETE /orders/{id}`, `POST /orders/{id}/close` |
 | Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
@@ -124,7 +142,8 @@ uv run python scripts/create_admin.py --email admin@example.com
 - `POST /users/login*` возвращает `access_token` (15 минут) и `refresh_token` (30 дней). Refresh-токен opaque, в БД хранится только его SHA-256.
 - `POST /users/refresh` ротирует refresh-токен: старый отзывается, выдаётся новый. Повторное использование отозванного токена считается компрометацией и отзывает все сессии пользователя.
 - `POST /users/logout` отзывает refresh-токен текущей сессии.
-- Вход и регистрация ограничены по частоте (in-memory, на один процесс uvicorn): попытки входа — на IP+email, регистрации — на IP. Ответ `429` содержит `Retry-After`.
+- `POST /users/me/password` требует текущий пароль, меняет его и отзывает все refresh-токены. Ранее выданные access-токены живут до 15 минут.
+- Вход и регистрация ограничены по частоте: попытки входа — на IP+email, регистрации — на IP. Ответ `429` содержит `Retry-After`. С `REDIS_URL` счётчики общие для всех воркеров; без Redis используется in-memory fallback.
 
 - Исполнитель может отправить не больше `MAX_PROPOSALS_PER_DAY` откликов за скользящие 24 часа.
 - На один заказ — один отклик от исполнителя (защищено уникальным индексом); нельзя откликаться на свой или закрытый заказ.
@@ -139,7 +158,8 @@ uv run python scripts/create_admin.py --email admin@example.com
 - Заблокированный пользователь (`is_active=false`) не может войти, а выданные ранее токены перестают работать; блокировка доступна только админам.
 - `POST /uploads/images` принимает только JPEG, PNG и WebP до `MEDIA_MAX_UPLOAD_SIZE_MB`. Файл проверяется через Pillow (а не по расширению), поворачивается по EXIF, уменьшается до 1920 px по длинной стороне и сохраняется как WebP с UUID-именем; ответ содержит `url` для поля `photos` заказа.
 - `/media/*` отдаётся статикой без авторизации: имена файлов — случайные UUID, содержимое не секретно.
-- Realtime работает в памяти процесса: при нескольких воркерах uvicorn клиенты разных процессов не увидят события друг друга. Для масштабирования нужен общий брокер.
+- Realtime с `REDIS_URL` использует общий pub/sub-канал: событие, отправленное в одном воркере, получают клиенты всех воркеров. Без Redis события доставляются только внутри процесса (in-memory fallback).
+- Каждый HTTP-ответ содержит `X-Request-ID` (значение клиента сохраняется), а в логах есть request_id, метод, путь, статус и длительность запроса.
 - Заказы с истёкшим дедлайном не попадают в список доступных.
 - Время хранится в UTC (`timestamptz`); `deadline` без таймзоны трактуется как UTC.
 
@@ -152,6 +172,22 @@ uv run python scripts/create_admin.py --email admin@example.com
 cd backend
 uv run pytest --cov=api --cov=core --cov-report=term-missing
 uv run ruff check .
+```
+
+Порог покрытия — 75%; CI также проверяет миграции и линтер.
+
+## Обслуживание
+
+```bash
+cd backend
+# Удалить истёкшие refresh-токены (cron, например раз в сутки)
+uv run python scripts/purge_refresh_tokens.py
+
+# Посмотреть неиспользуемые изображения старше 24 часов
+uv run python scripts/cleanup_media.py --dry-run
+
+# Удалить их
+uv run python scripts/cleanup_media.py --min-age-hours 24
 ```
 
 Линтер и проверка YAML также запускаются через pre-commit:
