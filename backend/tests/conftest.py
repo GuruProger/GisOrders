@@ -135,14 +135,16 @@ async def make_order(
     title: str = "Спилить берёзу",
     lat: float = 55.7558,
     lon: float = 37.6173,
+    min_price: float | None = 1000.0,
+    max_price: float | None = 5000.0,
     status: OrderStatus = OrderStatus.OPEN,
 ) -> Order:
     order = Order(
         title=title,
         description="Тестовое описание",
         status=status,
-        min_price=1000.0,
-        max_price=5000.0,
+        min_price=min_price,
+        max_price=max_price,
         deadline=datetime.now() + timedelta(days=7),
         # PostGIS: порядок координат POINT(lon lat)
         location=WKTElement(f"POINT({lon} {lat})", srid=4326),

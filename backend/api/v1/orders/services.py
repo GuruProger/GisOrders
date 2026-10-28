@@ -88,21 +88,20 @@ class OrderService:
 		)
 		stmt = stmt.where(Order.id.not_in(subquery))
 		
-		# Гео-фильтрация (если указаны координаты и радиус)
-		if filters.user_lat and filters.user_lon and filters.radius_km:
-			# Создаем точку с правильным SRID 4326
-			user_point = ST_SetSRID(ST_Point(filters.user_lon, filters.user_lat), 4326)
-			# Конвертируем geometry в geography для работы в метрах
-			# И используем радиус в метрах (km * 1000)
-			stmt = stmt.where(
-				ST_DWithin(
-					Order.location.cast(Geography),
-					user_point.cast(Geography),
-					filters.radius_km * 1000,
-				)
+		# Гео-фильтрация: координаты обязательны, поэтому фильтр применяется всегда
+		user_point = ST_SetSRID(ST_Point(filters.user_lon, filters.user_lat), 4326)
+		# Конвертируем geometry в geography для работы в метрах
+		# И используем радиус в метрах (km * 1000)
+		stmt = stmt.where(
+			ST_DWithin(
+				Order.location.cast(Geography),
+				user_point.cast(Geography),
+				filters.radius_km * 1000,
 			)
+		)
 		
-		# Фильтрация по цене
+		# Фильтрация по цене: сравниваем нижнюю границу бюджета заказа с min_price,
+		# а верхнюю - с max_price. NULL означает отсутствие ограничения.
 		if filters.min_price:
 			stmt = stmt.where(
 				or_(
@@ -113,8 +112,8 @@ class OrderService:
 		if filters.max_price:
 			stmt = stmt.where(
 				or_(
-					Order.min_price <= filters.max_price,
-					Order.min_price.is_(None)
+					Order.max_price <= filters.max_price,
+					Order.max_price.is_(None)
 				)
 			)
 		
