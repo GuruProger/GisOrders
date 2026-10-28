@@ -8,8 +8,11 @@ export function Header() {
   const user = useSession((state) => state.user)
 
   return (
-    <header role="banner" className="sticky top-0 z-30 border-b border-line bg-card">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4">
+    <header
+      role="banner"
+      className="sticky top-0 z-30 border-b border-line bg-card pt-[env(safe-area-inset-top)]"
+    >
+      <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-2 px-4">
         <Link
           to="/"
           aria-label="GisOrders — на главную"

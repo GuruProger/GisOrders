@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, type InitialEntry } from 'react-router'
 import { ToastProvider } from '@/app/providers'
 
 export interface TestProvidersProps {
   children: ReactNode
-  initialEntries?: string[]
+  initialEntries?: InitialEntry[]
 }
 
 /**

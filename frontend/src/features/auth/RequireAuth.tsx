@@ -20,7 +20,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
       <div
         role="status"
         aria-label="Загрузка сессии"
-        className="flex min-h-screen items-center justify-center bg-surface"
+        className="flex min-h-dvh items-center justify-center bg-surface"
       >
         <span
           aria-hidden="true"
