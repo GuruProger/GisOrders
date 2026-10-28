@@ -1,6 +1,6 @@
 import factory
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from geoalchemy2 import WKTElement
 
 from api.v1.users.models import User
@@ -32,7 +32,7 @@ class OrderFactory(factory.Factory):
 	description = factory.Faker("paragraph", nb_sentences=3)
 	min_price = factory.LazyFunction(lambda: round(random.uniform(1000, 5000), 2))
 	max_price = factory.LazyAttribute(lambda o: round(o.min_price + random.uniform(1000, 5000), 2))
-	deadline = factory.LazyFunction(lambda: datetime.now() + timedelta(days=7))
+	deadline = factory.LazyFunction(lambda: datetime.now(timezone.utc) + timedelta(days=7))
 	address = factory.Faker("address")
 	tree_type = factory.Iterator(["береза", "сосна", "ель", "дуб", "клен"])
 	tree_height = factory.LazyFunction(lambda: round(random.uniform(3, 30), 1))

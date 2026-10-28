@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator, ConfigD
 from typing import Optional, List
 from enum import Enum
 
+from core.time import as_utc, utcnow
+
 
 class OrderStatus(str, Enum):
 	OPEN = "open"
@@ -31,11 +33,10 @@ class OrderBase(BaseModel):
 	
 	@field_validator('deadline')
 	def validate_deadline(cls, v):
-		# Если пришел aware datetime - преобразуем к naive
-		if v.tzinfo is not None:
-			v = v.replace(tzinfo=None)
+		# Datetime без таймзоны трактуется как UTC
+		v = as_utc(v)
 		
-		if v <= datetime.now():
+		if v <= utcnow():
 			raise ValueError('Дедлайн должен быть в будущем')
 		return v
 
@@ -68,11 +69,10 @@ class OrderUpdate(BaseModel):
 	@field_validator('deadline')
 	def validate_deadline(cls, v):
 		if v:
-			# Если пришел aware datetime - преобразуем к naive
-			if v.tzinfo is not None:
-				v = v.replace(tzinfo=None)
+			# Datetime без таймзоны трактуется как UTC
+			v = as_utc(v)
 			
-			if v <= datetime.now():
+			if v <= utcnow():
 				raise ValueError('Дедлайн должен быть в будущем')
 		return v
 	

@@ -8,6 +8,7 @@ from datetime import datetime
 from enum import Enum
 
 from core.database import Base
+from core.time import utcnow
 
 if TYPE_CHECKING:
 	from ..users.models import User
@@ -33,10 +34,11 @@ class Order(Base):
 	
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
-		default=datetime.now,
+		DateTime(timezone=True),
+		default=utcnow,
 		nullable=False,
 	)
-	deadline: Mapped[datetime] = mapped_column(DateTime)  # Срок выполнения
+	deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # Срок выполнения
 	
 	# Геоданные (PostGIS)
 	location = mapped_column(Geometry('POINT', srid=4326))  # Координаты дерева
@@ -102,7 +104,8 @@ class OrderProposal(Base):
 	
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
-		default=datetime.now,
+		DateTime(timezone=True),
+		default=utcnow,
 		nullable=False,
 	)
 	

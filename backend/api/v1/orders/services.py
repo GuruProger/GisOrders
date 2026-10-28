@@ -11,10 +11,11 @@ from core.errors import (
 	NotFoundError, ForbiddenError, ConflictError,
 	BusinessRuleError, ProposalLimitError
 )
+from core.time import utcnow
 from .models import Order, OrderProposal, OrderStatus
 from .schemas import OrderCreate, OrderUpdate, OrderProposalCreate, OrderProposalUpdate, OrderFilters
 from typing import Optional, Sequence
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class OrderService:
 		stmt = select(Order).where(Order.status == OrderStatus.OPEN)
 		
 		# Исключаем заказы, у которых дедлайн уже прошел
-		stmt = stmt.where(Order.deadline >= datetime.now())
+		stmt = stmt.where(Order.deadline >= utcnow())
 		
 		# Исключить собственные заказы
 		stmt = stmt.where(Order.customer_id != executor_id)
@@ -344,7 +345,7 @@ class OrderProposalService:
 			)
 		
 		# Проверяем лимит откликов за день
-		day_ago = datetime.now() - timedelta(days=1)
+		day_ago = utcnow() - timedelta(days=1)
 		daily_count_stmt = select(func.count(OrderProposal.id)).where(
 			and_(
 				OrderProposal.executor_id == executor_id,

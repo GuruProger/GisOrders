@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select, func
@@ -129,7 +129,7 @@ async def test_old_proposals_dont_affect_daily_limit(
 	orders = await create_multiple_orders(db, customer, DAILY_LIMIT + 2)
 	
 	# Старый отклик - вне окна 24ч, в лимит не попадает
-	yesterday = datetime.now() - timedelta(hours=25)
+	yesterday = datetime.now(timezone.utc) - timedelta(hours=25)
 	old_proposal = await make_proposal(
 		db,
 		order_id=orders[0].id,

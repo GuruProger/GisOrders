@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import pytest
@@ -145,7 +145,7 @@ async def make_order(
         status=status,
         min_price=min_price,
         max_price=max_price,
-        deadline=datetime.now() + timedelta(days=7),
+        deadline=datetime.now(timezone.utc) + timedelta(days=7),
         # PostGIS: порядок координат POINT(lon lat)
         location=WKTElement(f"POINT({lon} {lat})", srid=4326),
         address="Москва, тестовый адрес",
