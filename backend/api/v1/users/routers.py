@@ -39,6 +39,14 @@ async def _create_login_response(session: AsyncSession, email: str, password: st
 			code="invalid_credentials",
 		)
 	
+	if not user.is_active:
+		raise ForbiddenError(
+			"Аккаунт заблокирован",
+			code="user_blocked",
+			resource="user",
+			resource_id=user.id,
+		)
+	
 	access_token_expires = datetime.timedelta(minutes=settings.access_token_expire_minutes)
 	access_token = create_access_token(
 		data={"user_id": user.id},
@@ -161,6 +169,59 @@ async def delete_user(
 		)
 	
 	await UserService.delete_user(session, user_id)
+
+
+@router.post(
+	"/{user_id}/block",
+	response_model=UserResponse,
+	summary="Блокировка пользователя",
+	description="Запрещает вход и использование API (только для админов)"
+)
+async def block_user(
+		user_id: int,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	return await _set_user_active(session, current_user, user_id, False)
+
+
+@router.post(
+	"/{user_id}/unblock",
+	response_model=UserResponse,
+	summary="Разблокировка пользователя",
+	description="Возвращает пользователю доступ к API (только для админов)"
+)
+async def unblock_user(
+		user_id: int,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	return await _set_user_active(session, current_user, user_id, True)
+
+
+async def _set_user_active(
+		session: AsyncSession,
+		admin: User,
+		user_id: int,
+		is_active: bool,
+) -> User:
+	if not admin.is_admin:
+		raise ForbiddenError(
+			"Недостаточно прав для выполнения этой операции",
+			code="admin_required",
+			resource="user",
+			resource_id=user_id,
+		)
+	
+	if admin.id == user_id:
+		raise BusinessRuleError(
+			"Нельзя изменить статус собственного аккаунта",
+			code="self_block_forbidden",
+			resource="user",
+			resource_id=user_id,
+		)
+	
+	return await UserService.set_active(session, user_id, is_active)
 
 
 @router.get(

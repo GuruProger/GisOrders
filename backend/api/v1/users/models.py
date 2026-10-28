@@ -1,6 +1,6 @@
 from typing import List, TYPE_CHECKING
 
-from sqlalchemy import String, Boolean
+from sqlalchemy import String, Boolean, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -17,6 +17,7 @@ class User(Base):
 	username: Mapped[str] = mapped_column(String, unique=True, index=True)
 	phone_number: Mapped[str] = mapped_column(String, nullable=True, unique=True, index=True)
 	is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+	is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
 	
 	# Связи с Order
 	orders_as_customer: Mapped[List["Order"]] = relationship(

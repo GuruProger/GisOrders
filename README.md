@@ -71,7 +71,7 @@ uv run uvicorn main:app --reload
 
 | Группа | Маршруты |
 |---|---|
-| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin) |
+| Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin), `POST /users/{id}/block`, `POST /users/{id}/unblock` (admin) |
 | Заказы | `POST /orders/`, `GET /orders/my`, `GET /orders/available`, `GET/PATCH/DELETE /orders/{id}`, `POST /orders/{id}/close` |
 | Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
@@ -90,6 +90,7 @@ uv run uvicorn main:app --reload
 - `assigned`-заказ нельзя редактировать или удалить: сначала закройте его.
 - Редактировать и отзывать можно только `pending`-отклики.
 - В закрытый чат писать нельзя; доступ к чату есть только у его участников.
+- Заблокированный пользователь (`is_active=false`) не может войти, а выданные ранее токены перестают работать; блокировка доступна только админам.
 - Заказы с истёкшим дедлайном не попадают в список доступных.
 - Время хранится в UTC (`timestamptz`); `deadline` без таймзоны трактуется как UTC.
 

@@ -7,7 +7,7 @@ from jose.exceptions import ExpiredSignatureError, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.errors import AuthenticationError
+from core.errors import AuthenticationError, ForbiddenError
 from core.database import db_helper
 from api.v1.users.services import UserService
 from api.v1.users.models import User
@@ -83,4 +83,11 @@ async def get_current_user(
 async def get_current_active_user(
 		current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
+	if not current_user.is_active:
+		raise ForbiddenError(
+			"Аккаунт заблокирован",
+			code="user_blocked",
+			resource="user",
+			resource_id=current_user.id,
+		)
 	return current_user

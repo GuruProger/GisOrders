@@ -72,6 +72,7 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
 	id: int
 	is_admin: bool
+	is_active: bool = True
 	
 	model_config = ConfigDict(from_attributes=True)  # Заменяет class Config в Pydantic v2
 
