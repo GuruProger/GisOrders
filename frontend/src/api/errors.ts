@@ -45,7 +45,9 @@ function firstValidationMessage(items: unknown[]): string | undefined {
   for (const item of items) {
     if (!isRecord(item)) continue
     const message = item.msg
-    if (typeof message === 'string' && message.trim()) return message
+    // FastAPI/Pydantic defaults are English; only surface messages that are
+    // already localized so the Russian UI never shows mixed languages.
+    if (typeof message === 'string' && /[А-Яа-яЁё]/.test(message)) return message
   }
   return undefined
 }

@@ -53,6 +53,14 @@ test('falls back to a Russian message when a validation array has no message', a
   expect(error.message).toBe('Не удалось выполнить запрос')
 })
 
+test('does not surface English FastAPI validation messages', async () => {
+  const error = await parseError(
+    jsonResponse({ detail: [{ msg: 'Field required', loc: ['body', 'email'] }] }, 422),
+  )
+
+  expect(error.message).toBe('Не удалось выполнить запрос')
+})
+
 test('never surfaces the English HTTP status text', async () => {
   const error = await parseError(
     new Response(null, { status: 422, statusText: 'Unprocessable Entity' }),
