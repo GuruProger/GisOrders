@@ -20,6 +20,11 @@ from .schemas import OrderCreate, OrderFilters, OrderProposalCreate
 logger = logging.getLogger(__name__)
 
 
+def _escape_like(value: str) -> str:
+	"""Экранирует спецсимволы LIKE, чтобы % и _ искались буквально."""
+	return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class OrderService:
 	@staticmethod
 	async def create_order(session: AsyncSession, order_data: OrderCreate, customer_id: int) -> Order:
@@ -121,6 +126,16 @@ class OrderService:
 		# Фильтрация по типу дерева
 		if filters.tree_type:
 			stmt = stmt.where(Order.tree_type.ilike(f"%{filters.tree_type}%"))
+		
+		# Поиск по названию и описанию (регистронезависимый, спецсимволы LIKE буквальны)
+		if filters.search and filters.search.strip():
+			pattern = f"%{_escape_like(filters.search.strip())}%"
+			stmt = stmt.where(
+				or_(
+					Order.title.ilike(pattern, escape="\\"),
+					Order.description.ilike(pattern, escape="\\"),
+				)
+			)
 		
 		# Фильтрация по высоте дерева
 		if filters.max_height:

@@ -146,6 +146,7 @@ class OrderFilters(BaseModel):
 	min_price: Optional[float] = Field(None, ge=0)
 	max_price: Optional[float] = Field(None, ge=0)
 	tree_type: Optional[str] = None
+	search: Optional[str] = Field(None, max_length=200)
 	max_height: Optional[float] = Field(None, gt=0)
 	page: int = Field(1, ge=1)
 	per_page: int = Field(20, ge=1, le=100)
