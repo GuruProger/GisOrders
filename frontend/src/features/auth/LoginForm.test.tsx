@@ -50,7 +50,7 @@ test('shows the server rate-limit message above the submit button', async () => 
   server.use(
     http.post('/api/v1/users/login/json', () =>
       HttpResponse.json(
-        { detail: { message: 'Слишком много попыток входа', code: 'rate_limited' } },
+        { detail: 'Слишком много попыток входа', error_code: 'rate_limited' },
         { status: 429 },
       ),
     ),
