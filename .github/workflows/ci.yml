@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: GisOrders
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d GisOrders"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_URL: postgresql+asyncpg://user:password@localhost:5432/GisOrders
+      JWT_SECRET_KEY: ci-secret-key-with-at-least-32-characters
+      POSTGRES_DB: GisOrders
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Create test database
+        run: |
+          PGPASSWORD=password psql -h localhost -U user -d GisOrders \
+            -c "CREATE DATABASE gisorders_test;"
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest -q
