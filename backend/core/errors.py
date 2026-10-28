@@ -93,6 +93,12 @@ class RateLimitError(AppError):
 	default_code = "rate_limited"
 
 
+class ServiceUnavailableError(AppError):
+	status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+	default_detail = "Сервис временно недоступен"
+	default_code = "service_unavailable"
+
+
 class BusinessRuleError(AppError):
 	"""
 	Ошибка бизнес-правила.
