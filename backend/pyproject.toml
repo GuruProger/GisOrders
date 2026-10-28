@@ -20,11 +20,6 @@ dependencies = [
     "uvicorn==0.37.0",
 ]
 
-[tool.uv.workspace]
-members = [
-    "gisorders",
-]
-
 [dependency-groups]
 dev = [
     "factory-boy>=3.3.3",
