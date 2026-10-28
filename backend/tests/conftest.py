@@ -184,7 +184,7 @@ async def make_proposal(
 
 
 def auth_headers(user_id: int) -> dict[str, str]:
-    token = create_access_token(data={"sub": str(user_id)})
+    token = create_access_token(data={"user_id": user_id})
     return {"Authorization": f"Bearer {token}"}
 
 
