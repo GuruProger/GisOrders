@@ -18,16 +18,8 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-async def get_current_user(
-		token: Annotated[Optional[str], Depends(oauth2_scheme)],
-		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
-) -> User:
-	if not token:
-		raise AuthenticationError(
-			"Токен не передан",
-			code="token_missing",
-		)
-	
+async def get_user_from_token(session: AsyncSession, token: str) -> User:
+	"""Проверяет access-токен и возвращает пользователя из БД."""
 	try:
 		payload = jwt.decode(
 			token,
@@ -78,6 +70,19 @@ async def get_current_user(
 		)
 	
 	return user
+
+
+async def get_current_user(
+		token: Annotated[Optional[str], Depends(oauth2_scheme)],
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+) -> User:
+	if not token:
+		raise AuthenticationError(
+			"Токен не передан",
+			code="token_missing",
+		)
+	
+	return await get_user_from_token(session, token)
 
 
 async def get_current_active_user(

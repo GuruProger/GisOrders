@@ -72,6 +72,9 @@ class Settings(BaseSettings):
 	register_rate_limit: int = 5
 	register_rate_window_seconds: int = 3600
 	
+	# WebSocket: сколько ждать кадр авторизации после подключения
+	ws_auth_timeout_seconds: float = 10.0
+	
 	# CORS
 	# API аутентифицируется Bearer-токеном, поэтому credentialed-запросы не нужны:
 	# wildcard-origin вместе с allow_credentials=True небезопасен.

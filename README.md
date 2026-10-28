@@ -75,6 +75,7 @@ uv run python scripts/create_admin.py --email admin@example.com
 | `REFRESH_TOKEN_EXPIRE_DAYS` | время жизни refresh-токена | `30` |
 | `LOGIN_RATE_LIMIT` / `LOGIN_RATE_WINDOW_SECONDS` | попытки входа на IP+email | `10` / `60` |
 | `REGISTER_RATE_LIMIT` / `REGISTER_RATE_WINDOW_SECONDS` | регистрации на IP | `5` / `3600` |
+| `WS_AUTH_TIMEOUT_SECONDS` | ожидание кадра авторизации WebSocket | `10` |
 | `MAX_PROPOSALS_PER_DAY` | лимит откликов за 24 часа | `3` |
 | `MEDIA_ROOT` | каталог для загруженных изображений | `backend/media` |
 | `MEDIA_MAX_UPLOAD_SIZE_MB` | максимальный размер загружаемого файла | `5` |
@@ -92,6 +93,26 @@ uv run python scripts/create_admin.py --email admin@example.com
 | Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
 | Загрузки | `POST /uploads/images` (multipart `file`); файлы отдаются с `/media/...` |
+| Realtime | `WS /ws/chats/{chat_id}` (авторизация первым кадром) |
+
+## Realtime
+
+`ws://<host>/api/v1/ws/chats/{chat_id}` — события конкретного чата.
+Браузерный WebSocket не умеет передавать `Authorization`, поэтому после
+подключения клиент отправляет первым кадром:
+
+```json
+{"type": "auth", "token": "<access_token>"}
+```
+
+Сервер отвечает `{"type": "auth.ok", ...}`. Коды закрытия: `4401` — токен не
+передан/недействителен, `4403` — не участник или аккаунт заблокирован,
+`4404` — чат не найден.
+
+Клиент может отправлять `{"type": "typing", "is_typing": true}`,
+`{"type": "read"}` и `{"type": "ping"}`. Сервер присылает `typing`,
+`message.read`, `pong`, а также `message.created` после отправки сообщения
+через REST. Сама отправка сообщений остаётся REST-эндпоинтом.
 
 ## Бизнес-правила
 
@@ -115,6 +136,7 @@ uv run python scripts/create_admin.py --email admin@example.com
 - Заблокированный пользователь (`is_active=false`) не может войти, а выданные ранее токены перестают работать; блокировка доступна только админам.
 - `POST /uploads/images` принимает только JPEG, PNG и WebP до `MEDIA_MAX_UPLOAD_SIZE_MB`. Файл проверяется через Pillow (а не по расширению), поворачивается по EXIF, уменьшается до 1920 px по длинной стороне и сохраняется как WebP с UUID-именем; ответ содержит `url` для поля `photos` заказа.
 - `/media/*` отдаётся статикой без авторизации: имена файлов — случайные UUID, содержимое не секретно.
+- Realtime работает в памяти процесса: при нескольких воркерах uvicorn клиенты разных процессов не увидят события друг друга. Для масштабирования нужен общий брокер.
 - Заказы с истёкшим дедлайном не попадают в список доступных.
 - Время хранится в UTC (`timestamptz`); `deadline` без таймзоны трактуется как UTC.
 

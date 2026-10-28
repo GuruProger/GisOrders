@@ -10,6 +10,7 @@ from .schemas import (
 )
 from .services import ChatService, MessageService
 from ..users.models import User
+from ..ws.manager import manager
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -138,7 +139,7 @@ async def send_message(
 		message_data,
 		current_user.id
 	)
-	return MessageResponse(
+	response = MessageResponse(
 		id=message.id,
 		text=message.text,
 		chat_id=message.chat_id,
@@ -146,6 +147,16 @@ async def send_message(
 		is_read=message.is_read,
 		created_at=message.created_at
 	)
+	
+	# Фиксируем сообщение до рассылки, чтобы клиенты не увидели событие,
+	# которого ещё нет в БД
+	await session.commit()
+	await manager.broadcast(chat_id, {
+		"type": "message.created",
+		"message": response.model_dump(mode="json"),
+	})
+	
+	return response
 
 
 @router.post(
@@ -159,6 +170,13 @@ async def mark_as_read(
 		current_user: Annotated[User, Depends(get_current_active_user)],
 ):
 	count = await MessageService.mark_messages_as_read(session, chat_id, current_user.id)
+	await session.commit()
+	await manager.broadcast(chat_id, {
+		"type": "message.read",
+		"chat_id": chat_id,
+		"user_id": current_user.id,
+		"count": count,
+	})
 	return {"message": f"Отмечено {count} сообщений как прочитанных"}
 
 
