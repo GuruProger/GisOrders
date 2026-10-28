@@ -184,6 +184,9 @@ logs
 .fleet
 .idea
 
+# Superpowers scratch space (brainstorm mockups, plans workspace)
+.superpowers/
+
 # Local env files
 .env.*
 !.env.example
