@@ -224,6 +224,23 @@ class UserService:
 		return user
 	
 	@staticmethod
+	async def set_admin(session: AsyncSession, user_id: int, is_admin: bool) -> User:
+		stmt = select(User).where(User.id == user_id)
+		user = (await session.execute(stmt)).scalar_one_or_none()
+		
+		if not user:
+			raise NotFoundError(
+				"Пользователь не найден",
+				resource="user",
+				resource_id=user_id,
+			)
+		
+		user.is_admin = is_admin
+		await session.flush()
+		await session.refresh(user)
+		return user
+	
+	@staticmethod
 	async def delete_user(session: AsyncSession, user_id: int) -> None:
 		stmt = select(User).where(User.id == user_id)
 		result = await session.execute(stmt)

@@ -53,6 +53,16 @@ uv run alembic upgrade head
 uv run uvicorn main:app --reload
 ```
 
+## Администратор
+
+Выдать права админа существующему пользователю или создать нового:
+
+```bash
+cd backend
+uv run python scripts/create_admin.py --email admin@example.com
+# для нового пользователя дополнительно: --username admin (пароль спросит интерактивно)
+```
+
 ## Переменные окружения
 
 | Переменная | Назначение | По умолчанию |
