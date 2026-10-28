@@ -30,7 +30,12 @@ class Chat(Base):
 	order_id: Mapped[int] = mapped_column(Integer, ForeignKey("order.id"), nullable=False)
 	customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
 	executor_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=False)
-	proposal_id: Mapped[int] = mapped_column(Integer, ForeignKey("order_proposal.id"), nullable=True)
+	proposal_id: Mapped[int] = mapped_column(
+		Integer,
+		ForeignKey("order_proposal.id", ondelete="SET NULL"),
+		nullable=True,
+		unique=True,
+	)
 	
 	# Связи
 	order: Mapped["Order"] = relationship("Order", back_populates="chats")

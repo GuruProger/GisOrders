@@ -73,15 +73,22 @@ uv run uvicorn main:app --reload
 |---|---|
 | Пользователи | `POST /users/register`, `POST /users/login`, `POST /users/login/json`, `GET/PATCH/DELETE /users/me`, `GET /users/{id}`, `DELETE /users/{id}` (admin) |
 | Заказы | `POST /orders/`, `GET /orders/my`, `GET /orders/available`, `GET/PATCH/DELETE /orders/{id}`, `POST /orders/{id}/close` |
-| Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}` |
+| Отклики | `POST/GET /orders/{id}/proposals`, `GET /orders/proposals/my`, `GET/PATCH/DELETE /orders/proposals/{id}`, `POST /orders/{id}/proposals/{proposal_id}/accept` |
 | Чаты | `GET /chats/my`, `GET /chats/unread/count`, `GET /chats/{id}`, `POST /chats/{id}/messages`, `POST /chats/{id}/read`, `POST /chats/{id}/close` |
 
 ## Бизнес-правила
 
+Статусы заказа: `open → assigned → closed`, статусы отклика: `pending → accepted | rejected`.
+
 - Исполнитель может отправить не больше `MAX_PROPOSALS_PER_DAY` откликов за скользящие 24 часа.
-- На один заказ — один отклик от исполнителя; нельзя откликаться на свой или закрытый заказ.
+- На один заказ — один отклик от исполнителя (защищено уникальным индексом); нельзя откликаться на свой или закрытый заказ.
 - Отклик автоматически создаёт чат, а текст отклика становится первым сообщением.
-- Удаление отклика закрывает чат; закрытие чата удаляет связанный отклик.
+- `POST /orders/{id}/proposals/{proposal_id}/accept` выбирает исполнителя: заказ переходит в `assigned`, выбранный отклик — в `accepted`, остальные — в `rejected`, их чаты закрываются. Заказ пропадает из `/available`.
+- `assigned` — это факт выбора исполнителя, а не статус оплаты или хода работ: оплата происходит вне сервиса.
+- Принятый отклик нельзя редактировать или отозвать, а его чат нельзя закрыть напрямую — только вместе с заказом.
+- Закрытие заказа (`POST /orders/{id}/close`) закрывает все его чаты и отклоняет отклики без решения; `closed_at` фиксирует время.
+- `assigned`-заказ нельзя редактировать или удалить: сначала закройте его.
+- Редактировать и отзывать можно только `pending`-отклики.
 - В закрытый чат писать нельзя; доступ к чату есть только у его участников.
 - Заказы с истёкшим дедлайном не попадают в список доступных.
 - Время хранится в UTC (`timestamptz`); `deadline` без таймзоны трактуется как UTC.

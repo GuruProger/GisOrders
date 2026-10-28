@@ -170,6 +170,26 @@ async def create_proposal(
 	)
 
 
+@router.post(
+	"/{order_id}/proposals/{proposal_id}/accept",
+	response_model=OrderProposalResponse,
+	summary="Выбор исполнителя",
+	description=(
+		"Заказчик принимает отклик: заказ переходит в assigned, остальные отклики "
+		"отклоняются, их чаты закрываются"
+	),
+)
+async def accept_proposal(
+		order_id: int,
+		proposal_id: int,
+		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
+		current_user: Annotated[User, Depends(get_current_active_user)],
+):
+	return await OrderService.accept_proposal(
+		session, order_id, proposal_id, current_user.id, current_user.is_admin
+	)
+
+
 @router.get(
 	"/{order_id}/proposals",
 	response_model=list[OrderProposalResponse],

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import Optional, Sequence, Any
 from .models import Chat, Message
 from .schemas import ChatCreate, MessageCreate
-from ..orders.models import OrderProposal
+from ..orders.models import OrderProposal, ProposalStatus
 from core.errors import NotFoundError, ForbiddenError, ConflictError, BusinessRuleError
 
 logger = logging.getLogger(__name__)
@@ -125,11 +125,19 @@ class ChatService:
 				resource_id=chat_id,
 			)
 		
-		# Если чат связан с откликом, удаляем этот отклик
+		# Если чат связан с откликом, удаляем этот отклик.
+		# Исключение - принятый отклик: его чат закрывается вместе с заказом.
 		if chat.proposal_id:
 			stmt = select(OrderProposal).where(OrderProposal.id == chat.proposal_id)
 			result = await session.execute(stmt)
 			proposal = result.scalar_one_or_none()
+			if proposal and proposal.status == ProposalStatus.ACCEPTED:
+				raise ConflictError(
+					"Чат выбранного исполнителя закрывается вместе с заказом",
+					code="accepted_proposal_chat",
+					resource="chat",
+					resource_id=chat_id,
+				)
 			if proposal:
 				await session.delete(proposal)
 		

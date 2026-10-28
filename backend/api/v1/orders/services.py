@@ -1,6 +1,6 @@
 import logging
 from geoalchemy2 import Geography
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, update, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from core.errors import (
 	BusinessRuleError, ProposalLimitError
 )
 from core.time import utcnow
-from .models import Order, OrderProposal, OrderStatus
+from .models import Order, OrderProposal, OrderStatus, ProposalStatus
 from .schemas import OrderCreate, OrderUpdate, OrderProposalCreate, OrderProposalUpdate, OrderFilters
 from typing import Optional, Sequence
 from datetime import timedelta
@@ -184,8 +184,8 @@ class OrderService:
 		# Проверяем, что заказ еще открыт
 		if order.status != OrderStatus.OPEN:
 			raise ConflictError(
-				"Нельзя редактировать закрытый заказ",
-				code="order_closed",
+				"Нельзя редактировать заказ после выбора исполнителя или закрытия",
+				code="order_not_open",
 				resource="order",
 				resource_id=order_id,
 			)
@@ -215,7 +215,7 @@ class OrderService:
 	
 	@staticmethod
 	async def close_order(session: AsyncSession, order_id: int, customer_id: int, is_admin: bool = False) -> Order:
-		stmt = select(Order).where(Order.id == order_id)
+		stmt = select(Order).where(Order.id == order_id).with_for_update()
 		result = await session.execute(stmt)
 		order = result.scalar_one_or_none()
 		
@@ -235,8 +235,7 @@ class OrderService:
 				resource_id=order_id,
 			)
 		
-		# Проверяем, что заказ еще открыт
-		if order.status != OrderStatus.OPEN:
+		if order.status == OrderStatus.CLOSED:
 			raise ConflictError(
 				"Заказ уже закрыт",
 				code="order_already_closed",
@@ -245,6 +244,11 @@ class OrderService:
 			)
 		
 		order.status = OrderStatus.CLOSED
+		order.closed_at = utcnow()
+		
+		# Закрываем все чаты заказа и отклоняем отклики, по которым не было решения
+		await OrderService._close_order_chats(session, order_id)
+		await OrderService._reject_pending_proposals(session, order_id)
 		
 		try:
 			await session.flush()
@@ -257,6 +261,137 @@ class OrderService:
 				code="order_close_failed",
 				resource="order",
 				resource_id=order_id,
+			)
+	
+	@staticmethod
+	async def _close_order_chats(session: AsyncSession, order_id: int) -> None:
+		from ..chat.models import Chat
+		
+		await session.execute(
+			update(Chat)
+			.where(and_(Chat.order_id == order_id, Chat.is_active.is_(True)))
+			.values(is_active=False)
+		)
+	
+	@staticmethod
+	async def _reject_pending_proposals(session: AsyncSession, order_id: int) -> None:
+		await session.execute(
+			update(OrderProposal)
+			.where(
+				and_(
+					OrderProposal.order_id == order_id,
+					OrderProposal.status == ProposalStatus.PENDING,
+				)
+			)
+			.values(status=ProposalStatus.REJECTED)
+		)
+	
+	@staticmethod
+	async def accept_proposal(
+			session: AsyncSession,
+			order_id: int,
+			proposal_id: int,
+			customer_id: int,
+			is_admin: bool = False,
+	) -> OrderProposal:
+		"""
+		Заказчик выбирает исполнителя.
+		
+		Заказ блокируется на время транзакции, чтобы два одновременных accept
+		не выбрали двух исполнителей. Принятый отклик фиксируется в заказе,
+		остальные отклики отклоняются, их чаты закрываются.
+		"""
+		from ..chat.models import Chat
+		
+		stmt = select(Order).where(Order.id == order_id).with_for_update()
+		order = (await session.execute(stmt)).scalar_one_or_none()
+		
+		if not order:
+			raise NotFoundError(
+				"Заказ не найден",
+				resource="order",
+				resource_id=order_id,
+			)
+		
+		if order.customer_id != customer_id and not is_admin:
+			raise ForbiddenError(
+				"Недостаточно прав для выбора исполнителя",
+				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
+		
+		if order.status != OrderStatus.OPEN:
+			raise ConflictError(
+				"Исполнитель уже выбран или заказ закрыт",
+				code="order_not_open",
+				resource="order",
+				resource_id=order_id,
+			)
+		
+		proposal_stmt = select(OrderProposal).where(
+			and_(
+				OrderProposal.id == proposal_id,
+				OrderProposal.order_id == order_id,
+			)
+		)
+		proposal = (await session.execute(proposal_stmt)).scalar_one_or_none()
+		
+		if not proposal:
+			raise NotFoundError(
+				"Предложение не найдено",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
+		
+		if proposal.status != ProposalStatus.PENDING:
+			raise ConflictError(
+				"По этому предложению уже принято решение",
+				code="proposal_not_pending",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
+		
+		order.accepted_proposal_id = proposal.id
+		order.status = OrderStatus.ASSIGNED
+		proposal.status = ProposalStatus.ACCEPTED
+		
+		await session.execute(
+			update(OrderProposal)
+			.where(
+				and_(
+					OrderProposal.order_id == order_id,
+					OrderProposal.id != proposal.id,
+					OrderProposal.status == ProposalStatus.PENDING,
+				)
+			)
+			.values(status=ProposalStatus.REJECTED)
+		)
+		
+		# Чат выбранного исполнителя остаётся открытым, остальные закрываются
+		await session.execute(
+			update(Chat)
+			.where(
+				and_(
+					Chat.order_id == order_id,
+					(Chat.proposal_id.is_(None)) | (Chat.proposal_id != proposal.id),
+					Chat.is_active.is_(True),
+				)
+			)
+			.values(is_active=False)
+		)
+		
+		try:
+			await session.flush()
+			await session.refresh(proposal)
+			return proposal
+		except IntegrityError as e:
+			logger.error("IntegrityError in accept_proposal", exc_info=e)
+			raise ConflictError(
+				"Не удалось выбрать исполнителя",
+				code="proposal_accept_failed",
+				resource="proposal",
+				resource_id=proposal_id,
 			)
 	
 	@staticmethod
@@ -282,6 +417,15 @@ class OrderService:
 			raise ForbiddenError(
 				"Недостаточно прав для удаления заказа",
 				code="order_access_denied",
+				resource="order",
+				resource_id=order_id,
+			)
+		
+		# Заказ с выбранным исполнителем нельзя удалить: сначала его нужно закрыть
+		if order.status == OrderStatus.ASSIGNED:
+			raise ConflictError(
+				"Нельзя удалить заказ, пока исполнитель выбран. Сначала закройте заказ",
+				code="order_assigned",
 				resource="order",
 				resource_id=order_id,
 			)
@@ -344,7 +488,14 @@ class OrderProposalService:
 				resource_id=order_id,
 			)
 		
-		# Проверяем лимит откликов за день
+		# Проверяем лимит откликов за день.
+		# Advisory lock сериализует создание откликов одним исполнителем:
+		# без него параллельные запросы проходят проверку COUNT одновременно.
+		await session.execute(
+			text("SELECT pg_advisory_xact_lock(:executor_id)"),
+			{"executor_id": executor_id},
+		)
+		
 		day_ago = utcnow() - timedelta(days=1)
 		daily_count_stmt = select(func.count(OrderProposal.id)).where(
 			and_(
@@ -500,6 +651,14 @@ class OrderProposalService:
 				resource_id=proposal.order_id,
 			)
 		
+		if proposal.status != ProposalStatus.PENDING:
+			raise ConflictError(
+				"Нельзя редактировать предложение после решения по нему",
+				code="proposal_not_pending",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
+		
 		# Обновляем только переданные поля
 		for field, value in update_data.items():
 			if hasattr(proposal, field):
@@ -544,6 +703,14 @@ class OrderProposalService:
 			raise ForbiddenError(
 				"Недостаточно прав для удаления предложения",
 				code="proposal_access_denied",
+				resource="proposal",
+				resource_id=proposal_id,
+			)
+		
+		if proposal.status != ProposalStatus.PENDING:
+			raise ConflictError(
+				"Нельзя отозвать предложение после решения по нему",
+				code="proposal_not_pending",
 				resource="proposal",
 				resource_id=proposal_id,
 			)

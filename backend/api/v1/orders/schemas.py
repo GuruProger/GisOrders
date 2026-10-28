@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator, ConfigD
 from typing import Optional, List
 
 from core.time import as_utc, utcnow
-from .models import OrderStatus
+from .models import OrderStatus, ProposalStatus
 
 
 # Базовые схемы для Order
@@ -93,7 +93,9 @@ class OrderResponse(BaseModel):
 	photos: Optional[List[str]]
 	status: OrderStatus
 	created_at: datetime
+	closed_at: Optional[datetime] = None
 	customer_id: int
+	accepted_proposal_id: Optional[int] = None
 	lat: float
 	lon: float
 	
@@ -120,6 +122,7 @@ class OrderProposalResponse(OrderProposalBase):
 	created_at: datetime
 	order_id: int
 	executor_id: int
+	status: ProposalStatus
 	
 	model_config = ConfigDict(from_attributes=True)
 

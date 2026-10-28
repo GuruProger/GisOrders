@@ -1,7 +1,7 @@
 from typing import List, TYPE_CHECKING, Optional
 from geoalchemy2 import Geometry
 from geoalchemy2.shape import to_shape
-from sqlalchemy import String, Text, DateTime, Float, Integer, Enum as SQLEnum, ForeignKey, func
+from sqlalchemy import String, Text, DateTime, Float, Integer, Enum as SQLEnum, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from datetime import datetime
@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 class OrderStatus(str, Enum):
 	OPEN = "open"  # На заказ можно откликнуться
-	CLOSED = "closed"  # На заказ нельзя откликаться
+	ASSIGNED = "assigned"  # Заказчик выбрал исполнителя
+	CLOSED = "closed"  # Сделка окончена или отменена
+
+
+class ProposalStatus(str, Enum):
+	PENDING = "pending"  # Ожидает решения заказчика
+	ACCEPTED = "accepted"  # Исполнитель выбран
+	REJECTED = "rejected"  # Отклонён автоматически или при закрытии заказа
 
 
 class Order(Base):
@@ -39,6 +46,7 @@ class Order(Base):
 		nullable=False,
 	)
 	deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # Срок выполнения
+	closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 	
 	# Геоданные (PostGIS)
 	location = mapped_column(Geometry('POINT', srid=4326))  # Координаты дерева
@@ -54,12 +62,32 @@ class Order(Base):
 	
 	# Внешние ключи
 	customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))  # Заказчик
+	accepted_proposal_id: Mapped[Optional[int]] = mapped_column(
+		Integer,
+		ForeignKey(
+			"order_proposal.id",
+			ondelete="SET NULL",
+			name="fk_order_accepted_proposal_id_order_proposal",
+			use_alter=True,
+		),
+		unique=True,
+		nullable=True,
+	)  # Выбранный исполнитель
 	
 	# Связи
 	customer: Mapped["User"] = relationship("User", foreign_keys=[customer_id], back_populates="orders_as_customer")
-	proposals: Mapped[List["OrderProposal"]] = relationship("OrderProposal", back_populates="order",
-	                                                        cascade="all, delete-orphan")
+	proposals: Mapped[List["OrderProposal"]] = relationship(
+		"OrderProposal",
+		foreign_keys="OrderProposal.order_id",
+		back_populates="order",
+		cascade="all, delete-orphan",
+	)
 	chats: Mapped[List["Chat"]] = relationship("Chat", back_populates="order", cascade="all, delete-orphan")
+	accepted_proposal: Mapped[Optional["OrderProposal"]] = relationship(
+		"OrderProposal",
+		foreign_keys=[accepted_proposal_id],
+		post_update=True,
+	)
 	
 	# Свойства для доступа к координатам
 	@property
@@ -101,6 +129,12 @@ class OrderProposal(Base):
 	# Информация о предложении
 	proposed_price: Mapped[float] = mapped_column(Float)  # Предложенная цена
 	message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Сообщение исполнителя
+	status: Mapped[ProposalStatus] = mapped_column(
+		SQLEnum(ProposalStatus, name="proposal_status"),
+		default=ProposalStatus.PENDING,
+		server_default=ProposalStatus.PENDING.name,
+		nullable=False,
+	)
 	
 	# Временные метки
 	created_at: Mapped[datetime] = mapped_column(
@@ -114,6 +148,14 @@ class OrderProposal(Base):
 	executor_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))
 	
 	# Связи
-	order: Mapped["Order"] = relationship("Order", back_populates="proposals")
+	order: Mapped["Order"] = relationship(
+		"Order", foreign_keys=[order_id], back_populates="proposals"
+	)
 	executor: Mapped["User"] = relationship("User", back_populates="order_proposals")
-	chat: Mapped["Chat"] = relationship("Chat", back_populates="proposal")
+	chat: Mapped[Optional["Chat"]] = relationship(
+		"Chat", back_populates="proposal", uselist=False
+	)
+	
+	__table_args__ = (
+		UniqueConstraint("order_id", "executor_id", name="uq_order_proposal_order_executor"),
+	)
