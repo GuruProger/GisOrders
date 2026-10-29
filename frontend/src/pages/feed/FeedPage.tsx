@@ -101,9 +101,13 @@ export function FeedPage() {
   const filtersLabel = activeCount > 0 ? `Фильтры · ${activeCount}` : 'Фильтры'
 
   function applyFilters(next: FeedFilters): void {
+    const pointChanged =
+      point !== null && (next.lat !== point.lat || next.lon !== point.lon)
+    if (pointChanged) setPoint({ lat: next.lat, lon: next.lon })
+
     const params = toSearchParams(next)
     if (params.toString() === search) {
-      void refetch()
+      if (!pointChanged) void refetch()
       return
     }
     setSearchParams(params, { replace: true })

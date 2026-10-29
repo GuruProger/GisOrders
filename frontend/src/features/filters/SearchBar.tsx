@@ -85,7 +85,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
         placeholder="Найти заказ"
         value={text}
         onChange={(event) => setText(event.target.value)}
-        className="pl-10 pr-12"
+        className="pl-10 pr-12 [&::-webkit-search-cancel-button]:hidden"
       />
 
       {text !== '' && (

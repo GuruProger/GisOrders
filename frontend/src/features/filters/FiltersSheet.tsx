@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { FeedFilters, SortField, SortOrder } from '@/api/types'
+import { requestGeolocation } from '@/features/user-point/model'
 import { TREE_TYPES } from '@/shared/config/trees'
 import { cn } from '@/shared/lib/cn'
 import { Button } from '@/shared/ui/Button'
@@ -105,7 +106,10 @@ function OptionChip({ selected, onClick, children }: OptionChipProps) {
 export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSheetProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const onCloseRef = useRef(onClose)
+  const locationRequest = useRef(0)
   const [working, setWorking] = useState(value)
+  const [locating, setLocating] = useState(false)
+  const [locationMessage, setLocationMessage] = useState<'success' | 'error' | null>(null)
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -113,7 +117,10 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
 
   useEffect(() => {
     if (!open) return
+    locationRequest.current += 1
     setWorking(value)
+    setLocating(false)
+    setLocationMessage(null)
 
     const dialog = dialogRef.current
     const previouslyFocused = document.activeElement
@@ -157,6 +164,28 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
 
   function update(patch: Partial<FeedFilters>): void {
     setWorking((current) => ({ ...current, ...patch }))
+  }
+
+  async function handleLocate(): Promise<void> {
+    const request = locationRequest.current + 1
+    locationRequest.current = request
+    setLocating(true)
+    setLocationMessage(null)
+
+    try {
+      const point = await requestGeolocation()
+      if (request !== locationRequest.current) return
+      if (point) {
+        update({ lat: point.lat, lon: point.lon })
+        setLocationMessage('success')
+      } else {
+        setLocationMessage('error')
+      }
+    } catch {
+      if (request === locationRequest.current) setLocationMessage('error')
+    } finally {
+      if (request === locationRequest.current) setLocating(false)
+    }
   }
 
   function setMinPrice(raw: string): void {
@@ -203,12 +232,14 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
   const applyLabel = total === null ? 'Показать' : `Показать ${total}`
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center lg:items-center">
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className="absolute inset-0 bg-forest-900/50"
-      />
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center lg:items-center"
+      onClick={(event) => {
+        const dialog = dialogRef.current
+        if (!(event.target instanceof Node) || !dialog?.contains(event.target)) onClose()
+      }}
+    >
+      <div aria-hidden="true" className="absolute inset-0 bg-forest-900/50" />
 
       <dialog
         ref={dialogRef}
@@ -246,10 +277,10 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"
-                aria-pressed={working.lat === value.lat && working.lon === value.lon}
-                onClick={() => update({ lat: value.lat, lon: value.lon })}
+                loading={locating}
+                onClick={() => void handleLocate()}
               >
-                Моё местоположение
+                {locating ? 'Определяем…' : 'Моё местоположение'}
               </Button>
               <Link
                 to="/map"
@@ -258,6 +289,16 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
                 Указать на карте
               </Link>
             </div>
+            {locationMessage === 'success' && (
+              <p role="status" className="text-sm text-moss-600">
+                Точка обновлена
+              </p>
+            )}
+            {locationMessage === 'error' && (
+              <p role="alert" className="text-sm text-terracotta-600">
+                Не удалось определить местоположение
+              </p>
+            )}
           </Section>
 
           <Section title="Радиус поиска">

@@ -40,6 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers()
   localStorage.clear()
+  Reflect.deleteProperty(navigator, 'geolocation')
 })
 
 afterAll(() => server.close())
@@ -146,6 +147,54 @@ test('toolbar opens the sheet and applying a radius updates the request', async 
 
   await vi.waitFor(() => {
     expect(requests.at(-1)?.searchParams.get('radius_km')).toBe('25')
+  })
+})
+
+test('persists a point picked in the sheet and searches around it', async () => {
+  Object.defineProperty(navigator, 'geolocation', {
+    configurable: true,
+    value: {
+      getCurrentPosition: (success: PositionCallback) => {
+        success({
+          coords: {
+            latitude: 50,
+            longitude: 30,
+            accuracy: 5,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        } as unknown as GeolocationPosition)
+      },
+    },
+  })
+
+  const requests: URL[] = []
+  server.use(
+    http.get('/api/v1/orders/available', ({ request }) => {
+      requests.push(new URL(request.url))
+      return HttpResponse.json([], { headers: { 'X-Total-Count': '4' } })
+    }),
+  )
+
+  render(<FeedPage />, { wrapper: TestProviders })
+
+  await screen.findByText(/заказов нет/i)
+  await userEvent.click(screen.getByRole('button', { name: 'Фильтры' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Моё местоположение' }))
+  await screen.findByText('Точка обновлена')
+  await userEvent.click(screen.getByRole('button', { name: 'Показать 4' }))
+
+  await vi.waitFor(() => {
+    const last = requests.at(-1)
+    expect(last?.searchParams.get('user_lat')).toBe('50')
+    expect(last?.searchParams.get('user_lon')).toBe('30')
+  })
+  expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.point) ?? 'null')).toEqual({
+    lat: 50,
+    lon: 30,
   })
 })
 
