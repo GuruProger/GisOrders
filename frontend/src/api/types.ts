@@ -79,20 +79,19 @@ export interface TokenPair {
 }
 
 /**
- * Feed filter state. Every field is optional so a URL can carry a partial
- * filter set; defaults are applied by the feed itself.
+ * UI filter state of the feed, stored in the address bar. The API uses
+ * snake_case names and a different subset of fields; `api/orders.ts` maps
+ * between the two.
  */
 export interface FeedFilters {
-  radius_km?: number
-  user_lat?: number
-  user_lon?: number
-  min_price?: number | null
-  max_price?: number | null
-  tree_type?: string | null
-  search?: string
-  max_height?: number | null
-  page?: number
-  per_page?: number
-  sort_by?: SortField
-  sort_order?: SortOrder
+  q: string
+  radiusKm: number
+  minPrice?: number | null
+  maxPrice?: number | null
+  treeType?: string | null
+  maxHeight?: number | null
+  sortBy: SortField
+  sortOrder: SortOrder
+  lat: number
+  lon: number
 }
