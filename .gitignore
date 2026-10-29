@@ -198,4 +198,4 @@ backend/media/
 # Frontend (vitest coverage; node_modules/dist already covered above)
 frontend/coverage/
 # `lib/` above targets Python packaging and must not hide frontend sources
-!frontend/src/shared/lib/
+!frontend/src/**/lib/
