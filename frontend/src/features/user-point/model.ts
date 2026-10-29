@@ -17,6 +17,24 @@ function geolocationAvailable(): boolean {
 }
 
 /**
+ * Asks the browser for a fresh point. Resolves `null` when geolocation is
+ * missing, denied or times out; the caller decides whether to prompt again.
+ */
+export function requestGeolocation(): Promise<Point | null> {
+  if (!geolocationAvailable()) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({ lat: position.coords.latitude, lon: position.coords.longitude })
+      },
+      () => resolve(null),
+      { timeout: 8000, maximumAge: 60_000 },
+    )
+  })
+}
+
+/**
  * The point the feed searches around. It is read from `localStorage`
  * synchronously, so a previously chosen point is available on the very first
  * render. Without one we ask the browser once; a missing or denied geolocation

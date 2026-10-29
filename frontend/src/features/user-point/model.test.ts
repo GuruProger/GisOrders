@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { STORAGE_KEYS } from '@/shared/lib/storage'
-import { useUserPoint } from './model'
+import { useUserPoint, requestGeolocation } from './model'
 
 function stubGeolocation(getCurrentPosition: Geolocation['getCurrentPosition']): void {
   Object.defineProperty(navigator, 'geolocation', {
@@ -79,4 +79,47 @@ test('keeps the point empty when geolocation fails', () => {
 
   expect(result.current[0]).toBeNull()
   expect(localStorage.getItem(STORAGE_KEYS.point)).toBeNull()
+})
+
+test('requestGeolocation resolves the browser position without storing it', async () => {
+  stubGeolocation(((success: PositionCallback) => {
+    success({
+      coords: {
+        latitude: 55.7,
+        longitude: 37.6,
+        accuracy: 5,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+    } as unknown as GeolocationPosition)
+  }) as unknown as Geolocation['getCurrentPosition'])
+
+  await expect(requestGeolocation()).resolves.toEqual({ lat: 55.7, lon: 37.6 })
+  expect(localStorage.getItem(STORAGE_KEYS.point)).toBeNull()
+})
+
+test('requestGeolocation resolves null when the browser denies access', async () => {
+  stubGeolocation(((
+    _success: PositionCallback,
+    error: PositionErrorCallback,
+  ) => {
+    error({
+      code: 1,
+      message: 'denied',
+      PERMISSION_DENIED: 1,
+      POSITION_UNAVAILABLE: 2,
+      TIMEOUT: 3,
+    })
+  }) as unknown as Geolocation['getCurrentPosition'])
+
+  await expect(requestGeolocation()).resolves.toBeNull()
+})
+
+test('requestGeolocation resolves null without a geolocation API', async () => {
+  Reflect.deleteProperty(navigator, 'geolocation')
+
+  await expect(requestGeolocation()).resolves.toBeNull()
 })

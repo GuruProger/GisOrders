@@ -23,6 +23,7 @@ export const router = createBrowserRouter(
           <Route path="/" element={<FeedPage />} />
           <Route path="/my/orders" element={<StubPage title="Мои заказы" />} />
           <Route path="/my/proposals" element={<StubPage title="Мои отклики" />} />
+          <Route path="/map" element={<StubPage title="Карта" />} />
           <Route path="/chats" element={<StubPage title="Чаты" />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFoundPage />} />

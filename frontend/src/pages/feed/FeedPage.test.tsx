@@ -117,6 +117,81 @@ test('resetting filters restores defaults but keeps the point', async () => {
   })
 })
 
+test('asks for a location when the point is unknown', async () => {
+  localStorage.clear()
+  Reflect.deleteProperty(navigator, 'geolocation')
+
+  render(<FeedPage />, { wrapper: TestProviders })
+
+  expect(await screen.findByText('Укажите, где искать')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Разрешить геолокацию' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Выбрать на карте' })).toHaveAttribute('href', '/map')
+})
+
+test('toolbar opens the sheet and applying a radius updates the request', async () => {
+  const requests: URL[] = []
+  server.use(
+    http.get('/api/v1/orders/available', ({ request }) => {
+      requests.push(new URL(request.url))
+      return HttpResponse.json([], { headers: { 'X-Total-Count': '4' } })
+    }),
+  )
+
+  render(<FeedPage />, { wrapper: TestProviders })
+
+  expect(screen.getByRole('link', { name: 'Карта' })).toHaveAttribute('href', '/map')
+  await userEvent.click(screen.getByRole('button', { name: 'Фильтры' }))
+  await userEvent.click(screen.getByRole('radio', { name: '25 км' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Показать 4' }))
+
+  await vi.waitFor(() => {
+    expect(requests.at(-1)?.searchParams.get('radius_km')).toBe('25')
+  })
+})
+
+test('search is written to the url and shows the no-results state', async () => {
+  const searches: (string | null)[] = []
+  server.use(
+    http.get('/api/v1/orders/available', ({ request }) => {
+      searches.push(new URL(request.url).searchParams.get('search'))
+      return HttpResponse.json([], { headers: { 'X-Total-Count': '0' } })
+    }),
+  )
+
+  render(<FeedPage />, { wrapper: TestProviders })
+
+  await userEvent.type(screen.getByLabelText('Поиск заказов'), 'спил')
+
+  expect(await screen.findByText('По запросу ничего не найдено')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Сбросить фильтры' })).toBeInTheDocument()
+  await vi.waitFor(() => expect(searches.at(-1)).toBe('спил'))
+})
+
+test('removing an active filter chip keeps the rest and refetches', async () => {
+  const requests: URL[] = []
+  server.use(
+    http.get('/api/v1/orders/available', ({ request }) => {
+      requests.push(new URL(request.url))
+      return HttpResponse.json([], { headers: { 'X-Total-Count': '0' } })
+    }),
+  )
+
+  render(<FeedPage />, {
+    wrapper: ({ children }) => (
+      <TestProviders initialEntries={['/?radius=25&tree=сосна']}>{children}</TestProviders>
+    ),
+  })
+
+  await screen.findByText(/заказов нет/i)
+  await userEvent.click(screen.getByRole('button', { name: 'Убрать фильтр Порода' }))
+
+  await vi.waitFor(() => {
+    const last = requests.at(-1)
+    expect(last?.searchParams.get('radius_km')).toBe('25')
+    expect(last?.searchParams.get('tree_type')).toBeNull()
+  })
+})
+
 test('loads next page on demand', async () => {
   let calls = 0
   const pages: (string | null)[] = []
