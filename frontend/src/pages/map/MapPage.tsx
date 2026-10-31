@@ -172,6 +172,7 @@ export function MapPage() {
                   onMouseEnter={() => setHighlightId(order.id)}
                   onFocus={() => setHighlightId(order.id)}
                   onMouseLeave={() => setHighlightId(null)}
+                  onBlur={() => setHighlightId(null)}
                 >
                   <OrderCard
                     order={order}
