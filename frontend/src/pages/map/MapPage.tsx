@@ -35,6 +35,7 @@ export function MapPage() {
   const [point, setPoint] = useUserPoint()
   const [draft, setDraft] = useState<Point | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [highlightId, setHighlightId] = useState<number | null>(null)
   const cardRefs = useRef(new Map<number, HTMLDivElement>())
   const search = searchParams.toString()
 
@@ -70,6 +71,7 @@ export function MapPage() {
 
   function selectMarker(id: number): void {
     setSelectedId(id)
+    setHighlightId(id)
     const card = cardRefs.current.get(id)
     if (card && typeof card.scrollIntoView === 'function') {
       card.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
@@ -82,6 +84,7 @@ export function MapPage() {
     setPoint(draft)
     setDraft(null)
     setSelectedId(null)
+    setHighlightId(null)
   }
 
   return (
@@ -91,6 +94,7 @@ export function MapPage() {
           markers={markers}
           center={center}
           selectedId={selectedId}
+          highlightId={highlightId}
           onSelect={selectMarker}
           onMapClick={filters === null ? setDraft : undefined}
           className="h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
@@ -165,14 +169,18 @@ export function MapPage() {
                   }}
                   data-order-id={order.id}
                   className="w-72 shrink-0 snap-start"
-                  onMouseEnter={() => setSelectedId(order.id)}
-                  onFocus={() => setSelectedId(order.id)}
+                  onMouseEnter={() => setHighlightId(order.id)}
+                  onFocus={() => setHighlightId(order.id)}
+                  onMouseLeave={() => setHighlightId(null)}
                 >
                   <OrderCard
                     order={order}
                     userPoint={point}
-                    selected={selectedId === order.id}
-                    onClick={() => setSelectedId(order.id)}
+                    selected={selectedId === order.id || highlightId === order.id}
+                    onClick={() => {
+                      setSelectedId(order.id)
+                      setHighlightId(order.id)
+                    }}
                   />
                 </div>
               ))}

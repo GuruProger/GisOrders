@@ -53,7 +53,7 @@ export function FeedPage() {
   const [point, setPoint] = useUserPoint()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [locating, setLocating] = useState(false)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [highlightId, setHighlightId] = useState<number | null>(null)
   const search = searchParams.toString()
 
   const filters = useMemo(
@@ -140,7 +140,7 @@ export function FeedPage() {
   }
 
   function highlightOrder(id: number): void {
-    setSelectedId(id)
+    setHighlightId(id)
     const card = cardRefs.current.get(id)
     if (card && typeof card.scrollIntoView === 'function') {
       card.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -283,13 +283,14 @@ export function FeedPage() {
                       else cardRefs.current.delete(order.id)
                     }}
                     data-order-id={order.id}
-                    onMouseEnter={() => setSelectedId(order.id)}
-                    onFocus={() => setSelectedId(order.id)}
+                    onMouseEnter={() => setHighlightId(order.id)}
+                    onFocus={() => setHighlightId(order.id)}
+                    onMouseLeave={() => setHighlightId(null)}
                   >
                     <OrderCard
                       order={order}
                       userPoint={point}
-                      selected={selectedId === order.id}
+                      selected={highlightId === order.id}
                       onClick={() => navigate(`/orders/${order.id}`)}
                     />
                   </div>
@@ -322,7 +323,7 @@ export function FeedPage() {
             <MapView
               markers={mapMarkers}
               center={point}
-              selectedId={selectedId}
+              highlightId={highlightId}
               onSelect={highlightOrder}
               className="h-full"
             />

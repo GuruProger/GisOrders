@@ -74,3 +74,9 @@ test('flies to the selected marker', () => {
 
   expect(mapApi.flyTo).toHaveBeenCalledWith([55.8, 37.7], expect.any(Number))
 })
+
+test('highlighting a marker does not move the viewport', () => {
+  render(<MapView markers={markers} center={center} highlightId={8} />)
+
+  expect(mapApi.flyTo).not.toHaveBeenCalled()
+})

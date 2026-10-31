@@ -15,7 +15,10 @@ const FOCUS_ZOOM = 15
 export interface MapViewProps {
   markers: MapMarker[]
   center: Point
+  /** Explicit selection: the map flies to this marker. */
   selectedId?: number | null
+  /** Hover/focus highlight only; never moves the viewport. */
+  highlightId?: number | null
   onSelect?(id: number): void
   className?: string
   /** Enables point picking: called with the coordinates of a map click. */
@@ -34,8 +37,8 @@ function markerIcon(label: string, selected: boolean): L.DivIcon {
   return L.divIcon({
     className: 'order-marker',
     html: `<span class="flex flex-col items-center"><span class="${pill}">${label}</span><span class="h-2 w-0.5 bg-moss-600"></span></span>`,
-    iconSize: [140, 52],
-    iconAnchor: [70, 52],
+    iconSize: [180, 52],
+    iconAnchor: [90, 52],
     popupAnchor: [0, -52],
   })
 }
@@ -97,6 +100,7 @@ export function MapView({
   markers,
   center,
   selectedId = null,
+  highlightId = null,
   onSelect,
   className,
   onMapClick,
@@ -123,7 +127,7 @@ export function MapView({
           <Marker
             key={marker.id}
             position={[marker.lat, marker.lon]}
-            icon={markerIcon(marker.label, marker.id === selectedId)}
+            icon={markerIcon(marker.label, marker.id === selectedId || marker.id === highlightId)}
             title={marker.label}
             alt={marker.label}
             keyboard
