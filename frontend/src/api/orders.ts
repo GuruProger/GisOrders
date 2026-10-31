@@ -57,3 +57,13 @@ export async function fetchOrder(id: number): Promise<Order> {
   const { data } = await apiRequest<Order>(`/orders/${id}`)
   return data
 }
+
+/** Closes an order; the owner (or an admin) only. */
+export async function closeOrder(id: number): Promise<void> {
+  await apiRequest<Order>(`/orders/${id}/close`, { method: 'POST' })
+}
+
+/** Deletes an order; the backend refuses while an executor is assigned. */
+export async function deleteOrder(id: number): Promise<void> {
+  await apiRequest<null>(`/orders/${id}`, { method: 'DELETE' })
+}

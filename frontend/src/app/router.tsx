@@ -5,6 +5,7 @@ import { FeedPage } from '@/pages/feed/FeedPage'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { MapPage } from '@/pages/map/MapPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
+import { OrderPage } from '@/pages/order/OrderPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { RegisterPage } from '@/pages/register/RegisterPage'
 
@@ -25,6 +26,7 @@ export const router = createBrowserRouter(
           <Route path="/my/orders" element={<StubPage title="Мои заказы" />} />
           <Route path="/my/proposals" element={<StubPage title="Мои отклики" />} />
           <Route path="/map" element={<MapPage />} />
+          <Route path="/orders/:id" element={<OrderPage />} />
           <Route path="/chats" element={<StubPage title="Чаты" />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFoundPage />} />
