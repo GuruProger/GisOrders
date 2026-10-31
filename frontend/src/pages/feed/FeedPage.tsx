@@ -14,6 +14,8 @@ import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
 import { Skeleton } from '@/shared/ui/Skeleton'
 import { OrderCard } from '@/widgets/order-card/OrderCard'
+import { MapView } from '@/widgets/map/MapView'
+import { buildMarkers } from '@/widgets/map/markers'
 
 const ORDER_FORMS: [string, string, string] = ['заказ', 'заказа', 'заказов']
 const RADIUS_STEPS = [5, 10, 25, 50] as const
@@ -51,6 +53,7 @@ export function FeedPage() {
   const [point, setPoint] = useUserPoint()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [locating, setLocating] = useState(false)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
   const search = searchParams.toString()
 
   const filters = useMemo(
@@ -75,6 +78,7 @@ export function FeedPage() {
   const { hasNextPage, isFetchingNextPage, fetchNextPage, refetch } = query
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const pullStart = useRef<number | null>(null)
+  const cardRefs = useRef(new Map<number, HTMLDivElement>())
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -91,7 +95,11 @@ export function FeedPage() {
     return () => observer.disconnect()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
-  const orders = query.data?.pages.flatMap((page) => page.orders) ?? []
+  const orders = useMemo(
+    () => query.data?.pages.flatMap((page) => page.orders) ?? [],
+    [query.data],
+  )
+  const mapMarkers = useMemo(() => buildMarkers(orders), [orders])
   const total = query.data?.pages[0]?.total ?? null
   const count = total ?? orders.length
   const radiusKm = filters?.radiusKm ?? DEFAULT_FILTERS.radiusKm
@@ -129,6 +137,14 @@ export function FeedPage() {
   function resetFilters(): void {
     if (!point) return
     applyFilters({ ...DEFAULT_FILTERS, lat: point.lat, lon: point.lon })
+  }
+
+  function highlightOrder(id: number): void {
+    setSelectedId(id)
+    const card = cardRefs.current.get(id)
+    if (card && typeof card.scrollIntoView === 'function') {
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
   }
 
   async function handleRequestLocation(): Promise<void> {
@@ -171,116 +187,148 @@ export function FeedPage() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-forest-900">Заказы рядом</h1>
-        {orders.length > 0 && <p className="text-sm text-muted-strong">{countLabel}</p>}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <SearchBar value={searchQuery} onChange={handleSearch} />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            disabled={filters === null}
-            onClick={() => setSheetOpen(true)}
-          >
-            {filtersLabel}
-          </Button>
-          <Link to="/map" className={secondaryLinkClasses}>
-            Карта
-          </Link>
-        </div>
-
-        {filters && <ActiveFilters value={filters} onChange={applyFilters} />}
-      </div>
-
-      {point === null ? (
-        <EmptyState
-          title="Укажите, где искать"
-          description="Разрешите геолокацию или выберите точку на карте — покажем заказы рядом."
-          action={
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button loading={locating} onClick={() => void handleRequestLocation()}>
-                Разрешить геолокацию
-              </Button>
-              <Link to="/map" className={secondaryLinkClasses}>
-                Выбрать на карте
-              </Link>
-            </div>
-          }
-        />
-      ) : query.isLoading ? (
-        <FeedSkeleton />
-      ) : query.isError && orders.length === 0 ? (
-        <EmptyState
-          title="Не удалось загрузить заказы"
-          description="Проверьте соединение и попробуйте ещё раз."
-          action={<Button onClick={() => void refetch()}>Повторить</Button>}
-        />
-      ) : showEmpty ? (
-        searching ? (
-          <EmptyState
-            title="По запросу ничего не найдено"
-            description="Попробуйте изменить запрос или сбросить фильтры."
-            action={
-              <Button variant="ghost" onClick={resetFilters}>
-                Сбросить фильтры
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            title={`В радиусе ${radiusKm} км заказов нет`}
-            description="Попробуйте увеличить радиус поиска или изменить фильтры."
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={widenRadius}>Увеличить радиус</Button>
-                <Button variant="ghost" onClick={resetFilters}>
-                  Сбросить фильтры
-                </Button>
-              </div>
-            }
-          />
-        )
-      ) : (
-        <>
-          {query.isError && (
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card p-3">
-              <span className="text-sm text-muted-strong">
-                Не удалось обновить список заказов.
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => void refetch()}>
-                Повторить
-              </Button>
-            </div>
-          )}
-
-          <div role="list" className="flex flex-col gap-3">
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                userPoint={point}
-                onClick={() => navigate(`/orders/${order.id}`)}
-              />
-            ))}
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold text-forest-900">Заказы рядом</h1>
+            {orders.length > 0 && <p className="text-sm text-muted-strong">{countLabel}</p>}
           </div>
 
-          {hasNextPage && (
-            <div className="flex flex-col items-center gap-2">
-              <div ref={sentinelRef} aria-hidden="true" className="h-px w-full" />
+          <div className="flex flex-col gap-2">
+            <SearchBar value={searchQuery} onChange={handleSearch} />
+
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="secondary"
-                onClick={() => void fetchNextPage()}
-                loading={isFetchingNextPage}
+                disabled={filters === null}
+                onClick={() => setSheetOpen(true)}
               >
-                Показать ещё
+                {filtersLabel}
               </Button>
+              <Link to="/map" className={secondaryLinkClasses}>
+                Карта
+              </Link>
             </div>
+
+            {filters && <ActiveFilters value={filters} onChange={applyFilters} />}
+          </div>
+
+          {point === null ? (
+            <EmptyState
+              title="Укажите, где искать"
+              description="Разрешите геолокацию или выберите точку на карте — покажем заказы рядом."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button loading={locating} onClick={() => void handleRequestLocation()}>
+                    Разрешить геолокацию
+                  </Button>
+                  <Link to="/map" className={secondaryLinkClasses}>
+                    Выбрать на карте
+                  </Link>
+                </div>
+              }
+            />
+          ) : query.isLoading ? (
+            <FeedSkeleton />
+          ) : query.isError && orders.length === 0 ? (
+            <EmptyState
+              title="Не удалось загрузить заказы"
+              description="Проверьте соединение и попробуйте ещё раз."
+              action={<Button onClick={() => void refetch()}>Повторить</Button>}
+            />
+          ) : showEmpty ? (
+            searching ? (
+              <EmptyState
+                title="По запросу ничего не найдено"
+                description="Попробуйте изменить запрос или сбросить фильтры."
+                action={
+                  <Button variant="ghost" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                title={`В радиусе ${radiusKm} км заказов нет`}
+                description="Попробуйте увеличить радиус поиска или изменить фильтры."
+                action={
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button onClick={widenRadius}>Увеличить радиус</Button>
+                    <Button variant="ghost" onClick={resetFilters}>
+                      Сбросить фильтры
+                    </Button>
+                  </div>
+                }
+              />
+            )
+          ) : (
+            <>
+              {query.isError && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card p-3">
+                  <span className="text-sm text-muted-strong">
+                    Не удалось обновить список заказов.
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => void refetch()}>
+                    Повторить
+                  </Button>
+                </div>
+              )}
+
+              <div role="list" className="flex flex-col gap-3">
+                {orders.map((order) => (
+                  <div
+                    key={order.id}
+                    ref={(node) => {
+                      if (node) cardRefs.current.set(order.id, node)
+                      else cardRefs.current.delete(order.id)
+                    }}
+                    data-order-id={order.id}
+                    onMouseEnter={() => setSelectedId(order.id)}
+                    onFocus={() => setSelectedId(order.id)}
+                  >
+                    <OrderCard
+                      order={order}
+                      userPoint={point}
+                      selected={selectedId === order.id}
+                      onClick={() => navigate(`/orders/${order.id}`)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {hasNextPage && (
+                <div className="flex flex-col items-center gap-2">
+                  <div ref={sentinelRef} aria-hidden="true" className="h-px w-full" />
+                  <Button
+                    variant="secondary"
+                    onClick={() => void fetchNextPage()}
+                    loading={isFetchingNextPage}
+                  >
+                    Показать ещё
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+
+        </div>
+
+        {point && (
+          <aside
+            data-testid="feed-map"
+            aria-label="Карта заказов"
+            className="hidden overflow-hidden rounded-2xl border border-line bg-card lg:sticky lg:top-24 lg:block lg:h-[calc(100dvh-8rem)]"
+          >
+            <MapView
+              markers={mapMarkers}
+              center={point}
+              selectedId={selectedId}
+              onSelect={highlightOrder}
+              className="h-full"
+            />
+          </aside>
+        )}
+      </div>
 
       <FiltersSheet
         open={sheetOpen}

@@ -3,6 +3,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AppShell } from '@/widgets/app-shell/AppShell'
 import { FeedPage } from '@/pages/feed/FeedPage'
 import { LoginPage } from '@/pages/login/LoginPage'
+import { MapPage } from '@/pages/map/MapPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { RegisterPage } from '@/pages/register/RegisterPage'
@@ -23,7 +24,7 @@ export const router = createBrowserRouter(
           <Route path="/" element={<FeedPage />} />
           <Route path="/my/orders" element={<StubPage title="Мои заказы" />} />
           <Route path="/my/proposals" element={<StubPage title="Мои отклики" />} />
-          <Route path="/map" element={<StubPage title="Карта" />} />
+          <Route path="/map" element={<MapPage />} />
           <Route path="/chats" element={<StubPage title="Чаты" />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFoundPage />} />

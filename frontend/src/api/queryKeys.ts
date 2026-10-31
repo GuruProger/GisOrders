@@ -9,6 +9,8 @@ export const qk = {
   orders: {
     all: ['orders'] as const,
     available: (filters: FeedFilters) => ['orders', 'available', filters] as const,
+    /** Single-page shape used by the map; kept apart from the infinite feed. */
+    map: (filters: FeedFilters) => ['orders', 'map', filters] as const,
     my: (status?: OrderStatus) => ['orders', 'my', status ?? 'all'] as const,
     detail: (id: number) => ['orders', 'detail', id] as const,
   },

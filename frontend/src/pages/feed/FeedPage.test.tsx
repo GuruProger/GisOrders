@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import type { Order } from '@/api/types'
@@ -6,6 +6,9 @@ import { STORAGE_KEYS } from '@/shared/lib/storage'
 import { server } from '@/test/msw'
 import { TestProviders } from '@/test/providers'
 import { FeedPage } from './FeedPage'
+
+vi.mock('react-leaflet', () => import('@/test/mapMocks'))
+vi.mock('@/widgets/map/MarkerClusterGroup', () => import('@/test/mapMocks'))
 
 const point = { lat: 55.75, lon: 37.61 }
 
@@ -58,6 +61,21 @@ test('renders first page of orders', async () => {
   expect(screen.getByRole('heading', { name: 'Заказы рядом' })).toBeInTheDocument()
   expect(screen.getByText('12 заказов · 10 км')).toBeInTheDocument()
   expect(screen.getByRole('list')).toBeInTheDocument()
+})
+
+test('desktop split renders the loaded orders on the map panel', async () => {
+  server.use(
+    http.get('/api/v1/orders/available', () =>
+      HttpResponse.json([order], { headers: { 'X-Total-Count': '1' } }),
+    ),
+  )
+
+  render(<FeedPage />, { wrapper: TestProviders })
+
+  await screen.findByText('Спилить сухое дерево')
+
+  const mapPanel = screen.getByTestId('feed-map')
+  expect(within(mapPanel).getByRole('button', { name: '2\u00A0000\u00A0₽' })).toBeInTheDocument()
 })
 
 test('empty feed suggests widening the radius', async () => {
