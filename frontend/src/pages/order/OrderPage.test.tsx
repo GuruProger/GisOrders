@@ -146,12 +146,14 @@ test('closed order shows closed badge and dates', async () => {
 })
 
 test('closing the order asks for confirmation and calls the api', async () => {
-  serveOrder(order)
+  let current = order
   let posted = 0
   server.use(
+    http.get('/api/v1/orders/1', () => HttpResponse.json(current)),
     http.post('/api/v1/orders/1/close', () => {
       posted += 1
-      return HttpResponse.json({ ...order, status: 'closed', closed_at: '2026-10-31T10:00:00Z' })
+      current = { ...order, status: 'closed', closed_at: '2026-10-31T10:00:00Z' }
+      return HttpResponse.json(current)
     }),
   )
 
@@ -168,6 +170,8 @@ test('closing the order asks for confirmation and calls the api', async () => {
   expect(posted).toBe(1)
   expect(await screen.findByText('Заказ закрыт')).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(await screen.findByText('31 окт')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Редактировать' })).not.toBeInTheDocument()
 })
 
 test('deleting the order asks for confirmation and navigates to my orders', async () => {

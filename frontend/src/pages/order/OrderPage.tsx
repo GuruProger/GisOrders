@@ -232,7 +232,9 @@ export function OrderPage() {
         error={errorMessage(close.error)}
         onConfirm={() => close.mutate()}
         onCancel={() => {
-          if (!close.isPending) setDialog(null)
+          if (close.isPending) return
+          setDialog(null)
+          close.reset()
         }}
       />
 
@@ -246,7 +248,9 @@ export function OrderPage() {
         error={errorMessage(remove.error)}
         onConfirm={() => remove.mutate()}
         onCancel={() => {
-          if (!remove.isPending) setDialog(null)
+          if (remove.isPending) return
+          setDialog(null)
+          remove.reset()
         }}
       />
     </section>
