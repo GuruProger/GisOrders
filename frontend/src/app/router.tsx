@@ -7,6 +7,7 @@ import { MapPage } from '@/pages/map/MapPage'
 import { MyOrdersPage } from '@/pages/my-orders/MyOrdersPage'
 import { MyProposalsPage } from '@/pages/my-proposals/MyProposalsPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
+import { OrderEditPage } from '@/pages/order-edit/OrderEditPage'
 import { OrderPage } from '@/pages/order/OrderPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { RegisterPage } from '@/pages/register/RegisterPage'
@@ -28,6 +29,8 @@ export const router = createBrowserRouter(
           <Route path="/my/orders" element={<MyOrdersPage />} />
           <Route path="/my/proposals" element={<MyProposalsPage />} />
           <Route path="/map" element={<MapPage />} />
+          <Route path="/orders/new" element={<OrderEditPage />} />
+          <Route path="/orders/:id/edit" element={<OrderEditPage />} />
           <Route path="/orders/:id" element={<OrderPage />} />
           <Route path="/chats" element={<StubPage title="Чаты" />} />
           <Route path="/profile" element={<ProfilePage />} />

@@ -3,6 +3,22 @@ import { apiRequest } from './client'
 
 export const FEED_PAGE_SIZE = 20
 
+/** Payload shared by order creation and editing; the backend names are snake_case. */
+export interface OrderInput {
+  title: string
+  description: string
+  min_price: number | null
+  max_price: number | null
+  deadline: string
+  address: string
+  tree_type: string
+  tree_height: number
+  tree_diameter: number
+  photos: string[]
+  lat: number
+  lon: number
+}
+
 /**
  * Maps the UI filter model onto the backend parameter names. The address bar
  * uses short keys and never carries the point; the API needs both.
@@ -55,6 +71,31 @@ export async function fetchMyOrders(status?: OrderStatus): Promise<Order[]> {
 
 export async function fetchOrder(id: number): Promise<Order> {
   const { data } = await apiRequest<Order>(`/orders/${id}`)
+  return data
+}
+
+export async function createOrder(input: OrderInput): Promise<Order> {
+  const { data } = await apiRequest<Order>('/orders/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return data
+}
+
+/**
+ * Updates an open order the current user owns. Every field is optional, but
+ * the backend requires `lat` and `lon` to be sent together.
+ */
+export async function updateOrder(
+  id: number,
+  input: Partial<OrderInput>,
+): Promise<Order> {
+  const { data } = await apiRequest<Order>(`/orders/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
   return data
 }
 
