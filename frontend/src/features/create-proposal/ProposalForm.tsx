@@ -67,7 +67,7 @@ export function ProposalForm({ orderId, maxPrice = null, onCreated }: ProposalFo
         hint={maxPrice !== null ? `Вилка заказчика: до ${formatMoney(maxPrice)}` : undefined}
         error={errors.price?.message}
       >
-        <Input id="proposal-price" type="number" inputMode="decimal" min="0" step="1" {...register('price')} />
+        <Input id="proposal-price" type="number" inputMode="decimal" min="1" step="1" {...register('price')} />
       </Field>
 
       <Field

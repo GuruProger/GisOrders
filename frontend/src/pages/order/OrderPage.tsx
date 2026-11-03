@@ -233,6 +233,19 @@ export function OrderPage() {
                 Перейти в режим исполнителя
               </Button>
             </>
+          ) : mineQuery.isError ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-muted-strong">
+                Не удалось проверить ваш отклик на этот заказ.
+              </p>
+              <Button
+                variant="secondary"
+                className="self-start"
+                onClick={() => void mineQuery.refetch()}
+              >
+                Повторить
+              </Button>
+            </div>
           ) : mineQuery.isLoading ? (
             // Avoid flashing the form while the proposals list is still loading.
             <Skeleton className="h-24 w-full" data-testid="proposal-skeleton" />

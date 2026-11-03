@@ -197,6 +197,29 @@ test('executor sees own pending proposal and can withdraw it', async () => {
   expect(await screen.findByRole('button', { name: 'Откликнуться' })).toBeInTheDocument()
 })
 
+test('proposal lookup failure shows a retry instead of the form', async () => {
+  let requests = 0
+  server.use(
+    http.get('/api/v1/orders/1', () => HttpResponse.json({ ...order, customer_id: 99 })),
+    http.get('/api/v1/orders/proposals/my', () => {
+      requests += 1
+      return HttpResponse.json({ detail: 'Ошибка сервера' }, { status: 500 })
+    }),
+  )
+  setRoleMode('executor')
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+  expect(
+    await screen.findByText('Не удалось проверить ваш отклик на этот заказ.'),
+  ).toBeInTheDocument()
+  expect(screen.queryByLabelText('Ваша цена')).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+  await vi.waitFor(() => expect(requests).toBeGreaterThanOrEqual(2))
+})
+
 test('owner order page never fetches my proposals', async () => {
   serveOrder(order)
   let proposalFetches = 0
