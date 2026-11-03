@@ -70,6 +70,7 @@ function renderOrder() {
         <Route path="/orders/:id" element={<OrderPage />} />
         <Route path="/" element={<p>Лента</p>} />
         <Route path="/my/orders" element={<p>Мои заказы</p>} />
+        <Route path="/chats" element={<p>Чаты</p>} />
       </Routes>
     </TestProviders>,
   )
@@ -81,6 +82,8 @@ beforeEach(() => {
   localStorage.clear()
   setRoleMode('customer')
   useSession.setState({ user, status: 'authenticated' })
+  // Owner pages now load the proposals section.
+  server.use(http.get('/api/v1/orders/1/proposals', () => HttpResponse.json([])))
 })
 
 afterEach(() => {
@@ -234,6 +237,99 @@ test('owner order page never fetches my proposals', async () => {
   await screen.findByRole('heading', { name: order.title })
   expect(screen.getByRole('button', { name: 'Редактировать' })).toBeInTheDocument()
   expect(proposalFetches).toBe(0)
+})
+
+test('owner sees proposals and accepts one after confirmation', async () => {
+  serveOrder(order)
+  const ownProposal: Proposal = {
+    id: 5,
+    proposed_price: 2800,
+    message: 'Работаю аккуратно',
+    created_at: '2026-10-30T12:00:00Z',
+    order_id: 1,
+    executor_id: 2,
+    status: 'pending',
+  }
+  server.use(
+    http.get('/api/v1/orders/1/proposals', () => HttpResponse.json([ownProposal])),
+    http.get('/api/v1/users/2', () => HttpResponse.json({ id: 2, username: 'Иван' })),
+    http.post('/api/v1/orders/1/proposals/5/accept', () =>
+      HttpResponse.json({ ...ownProposal, status: 'accepted' }),
+    ),
+  )
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+  expect(await screen.findByText('Иван')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Отклики' })).toBeInTheDocument()
+  expect(screen.getByText('2 800 ₽')).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Принять' }))
+
+  const dialog = screen.getByRole('dialog')
+  expect(within(dialog).getByText(/Остальные отклики будут отклонены/)).toBeInTheDocument()
+
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Принять и открыть чат' }))
+
+  expect(await screen.findByText('Чаты')).toBeInTheDocument()
+  expect(screen.getByText('Исполнитель выбран')).toBeInTheDocument()
+})
+
+test('accept conflict explains the error and refetches the proposals', async () => {
+  serveOrder(order)
+  const ownProposal: Proposal = {
+    id: 5,
+    proposed_price: 2800,
+    message: null,
+    created_at: '2026-10-30T12:00:00Z',
+    order_id: 1,
+    executor_id: 2,
+    status: 'pending',
+  }
+  let fetches = 0
+  server.use(
+    http.get('/api/v1/orders/1/proposals', () => {
+      fetches += 1
+      return HttpResponse.json([ownProposal])
+    }),
+    http.get('/api/v1/users/2', () => HttpResponse.json({ id: 2, username: 'Иван' })),
+    http.post('/api/v1/orders/1/proposals/5/accept', () =>
+      HttpResponse.json(
+        { detail: 'Исполнитель уже выбран или заказ закрыт', error_code: 'order_not_open' },
+        { status: 409 },
+      ),
+    ),
+  )
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+  await screen.findByText('Иван')
+  await userEvent.click(screen.getByRole('button', { name: 'Принять' }))
+  await userEvent.click(
+    within(screen.getByRole('dialog')).getByRole('button', { name: 'Принять и открыть чат' }),
+  )
+
+  const dialog = screen.getByRole('dialog')
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+    'Исполнитель уже выбран или заказ закрыт',
+  )
+  await vi.waitFor(() => expect(fetches).toBeGreaterThanOrEqual(2))
+})
+
+test('executor of an assigned order sees the accepted status and the chat link', async () => {
+  serveOrder({ ...order, customer_id: 99, status: 'assigned', accepted_proposal_id: 30 })
+  serveMyProposals(() => [{ ...myPendingProposal, status: 'accepted' }])
+  setRoleMode('executor')
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+
+  expect(await screen.findByText('Ваш отклик')).toBeInTheDocument()
+  expect(screen.getByText('Принят')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Перейти в чат' })).toHaveAttribute('href', '/chats')
 })
 
 test('customer mode of another user suggests switching roles', async () => {

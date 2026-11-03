@@ -33,3 +33,18 @@ export async function createProposal(orderId: number, input: ProposalInput): Pro
 export async function withdrawProposal(proposalId: number): Promise<void> {
   await apiRequest<null>(`/orders/proposals/${proposalId}`, { method: 'DELETE' })
 }
+
+/** All proposals of one order; the owner (or an admin) only. */
+export async function fetchOrderProposals(orderId: number): Promise<Proposal[]> {
+  const { data } = await apiRequest<Proposal[]>(`/orders/${orderId}/proposals`)
+  return data
+}
+
+/** Accepts one proposal: the order becomes `assigned` and the others are rejected. */
+export async function acceptProposal(orderId: number, proposalId: number): Promise<Proposal> {
+  const { data } = await apiRequest<Proposal>(
+    `/orders/${orderId}/proposals/${proposalId}/accept`,
+    { method: 'POST' },
+  )
+  return data
+}

@@ -4,6 +4,7 @@ import { AppShell } from '@/widgets/app-shell/AppShell'
 import { FeedPage } from '@/pages/feed/FeedPage'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { MapPage } from '@/pages/map/MapPage'
+import { MyOrdersPage } from '@/pages/my-orders/MyOrdersPage'
 import { MyProposalsPage } from '@/pages/my-proposals/MyProposalsPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { OrderPage } from '@/pages/order/OrderPage'
@@ -24,7 +25,7 @@ export const router = createBrowserRouter(
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<FeedPage />} />
-          <Route path="/my/orders" element={<StubPage title="Мои заказы" />} />
+          <Route path="/my/orders" element={<MyOrdersPage />} />
           <Route path="/my/proposals" element={<MyProposalsPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/orders/:id" element={<OrderPage />} />

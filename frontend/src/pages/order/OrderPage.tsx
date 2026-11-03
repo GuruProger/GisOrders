@@ -3,14 +3,16 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError } from '@/api/errors'
 import { closeOrder, deleteOrder, fetchOrder } from '@/api/orders'
-import { fetchMyProposals, withdrawProposal } from '@/api/proposals'
+import { fetchMyProposals, fetchOrderProposals, withdrawProposal } from '@/api/proposals'
 import { qk } from '@/api/queryKeys'
 import type { Order } from '@/api/types'
+import { ProposalList } from '@/features/accept-proposal/ProposalList'
 import { ProposalForm } from '@/features/create-proposal/ProposalForm'
 import { useToast } from '@/app/providers'
 import { useSession } from '@/features/auth/session'
 import { useRoleMode } from '@/features/switch-role/model'
 import { formatDeadline, formatMoney, formatShortDate } from '@/shared/lib/format'
+import { plural } from '@/shared/lib/plural'
 import { useDocumentTitle } from '@/shared/lib/use-document-title'
 import { Badge } from '@/shared/ui/Badge'
 import { Button } from '@/shared/ui/Button'
@@ -23,6 +25,8 @@ import { buildMarkers } from '@/widgets/map/markers'
 import { PhotoGallery } from './PhotoGallery'
 
 type DialogKind = 'close' | 'delete' | 'withdraw' | null
+
+const PROPOSAL_FORMS: [string, string, string] = ['отклик', 'отклика', 'откликов']
 
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
@@ -100,12 +104,21 @@ export function OrderPage() {
     },
   })
 
-  // Only a non-owner executor on an open order needs the proposals list; owners
-  // and customer-mode visitors never fetch it (ruling P28).
+  // Only a non-owner executor needs the proposals list; owners and
+  // customer-mode visitors never fetch it (ruling P28). Assigned orders need it
+  // too, to show the executor whether their own proposal was accepted.
+  const needsMyProposal = !isOwner && (order?.status === 'open' || order?.status === 'assigned')
   const mineQuery = useQuery({
     queryKey: qk.proposals.mine(),
     queryFn: fetchMyProposals,
-    enabled: canRespond && mode === 'executor',
+    enabled: needsMyProposal && mode === 'executor',
+  })
+
+  // The owner sees every proposal of the order (accept action included).
+  const proposalsQuery = useQuery({
+    queryKey: qk.proposals.forOrder(id),
+    queryFn: () => fetchOrderProposals(id),
+    enabled: validId && isOwner,
   })
 
   const myProposal = useMemo(
@@ -201,12 +214,95 @@ export function OrderPage() {
       </div>
 
       {order.status === 'assigned' && (
-        <Card className="p-4">
+        <Card className="flex flex-col gap-2 p-4">
           <p className="font-semibold text-forest-900">Исполнитель выбран</p>
           <p className="text-sm text-muted-strong">
             Заказ передан исполнителю, обсуждение продолжается в чате.
           </p>
+          {(isOwner || myProposal?.status === 'accepted') && (
+            <Link
+              to="/chats"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+            >
+              Перейти в чат
+            </Link>
+          )}
         </Card>
+      )}
+
+      {order.status === 'assigned' &&
+        !isOwner &&
+        mode === 'executor' &&
+        myProposal && (
+          <Card className="flex flex-col gap-2 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-forest-900">Ваш отклик</h2>
+              <Badge status={myProposal.status} />
+            </div>
+            <p className="text-sm text-muted-strong">
+              Ваша цена:{' '}
+              <span className="text-base font-semibold text-forest-900">
+                {formatMoney(myProposal.proposed_price)}
+              </span>
+            </p>
+            {myProposal.status === 'rejected' && (
+              <p className="text-sm text-muted-strong">
+                Заказчик выбрал другого исполнителя. Найдите новый заказ в ленте.
+              </p>
+            )}
+          </Card>
+        )}
+
+      {isOwner && (
+        <section className="flex flex-col gap-3" aria-labelledby="order-proposals-title">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="order-proposals-title" className="text-lg font-semibold text-forest-900">
+              Отклики
+            </h2>
+            {proposalsQuery.data && (
+              <span className="text-sm text-muted-strong">
+                {proposalsQuery.data.length}{' '}
+                {plural(proposalsQuery.data.length, PROPOSAL_FORMS)}
+              </span>
+            )}
+          </div>
+
+          {proposalsQuery.isLoading && (
+            <>
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-28 w-full" />
+            </>
+          )}
+
+          {proposalsQuery.isError && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card p-3">
+              <span className="text-sm text-muted-strong">
+                Не удалось загрузить отклики.
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void proposalsQuery.refetch()}
+              >
+                Повторить
+              </Button>
+            </div>
+          )}
+
+          {proposalsQuery.data && proposalsQuery.data.length === 0 && (
+            <p className="rounded-xl border border-line bg-card p-4 text-sm text-muted-strong">
+              Пока нет откликов. Заказ увидят исполнители в ленте рядом с вами.
+            </p>
+          )}
+
+          {proposalsQuery.data && proposalsQuery.data.length > 0 && (
+            <ProposalList
+              order={order}
+              proposals={proposalsQuery.data}
+              onAccepted={() => toast.show('Исполнитель выбран')}
+            />
+          )}
+        </section>
       )}
 
       {isOwner && order.status === 'open' && (
