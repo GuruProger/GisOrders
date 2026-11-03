@@ -3,8 +3,10 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ApiError } from '@/api/errors'
 import { closeOrder, deleteOrder, fetchOrder } from '@/api/orders'
+import { fetchMyProposals, withdrawProposal } from '@/api/proposals'
 import { qk } from '@/api/queryKeys'
 import type { Order } from '@/api/types'
+import { ProposalForm } from '@/features/create-proposal/ProposalForm'
 import { useToast } from '@/app/providers'
 import { useSession } from '@/features/auth/session'
 import { useRoleMode } from '@/features/switch-role/model'
@@ -20,7 +22,7 @@ import { MapView } from '@/widgets/map/MapView'
 import { buildMarkers } from '@/widgets/map/markers'
 import { PhotoGallery } from './PhotoGallery'
 
-type DialogKind = 'close' | 'delete' | null
+type DialogKind = 'close' | 'delete' | 'withdraw' | null
 
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
@@ -73,6 +75,10 @@ export function OrderPage() {
 
   useDocumentTitle(order ? `${order.title} — GisOrders` : 'Заказ — GisOrders')
 
+  // Ownership is computed before the early returns so hooks below keep their order.
+  const isOwner = user !== null && order !== null && user.id === order.customer_id
+  const canRespond = !isOwner && order?.status === 'open'
+
   const close = useMutation({
     mutationFn: () => closeOrder(id),
     onSuccess: () => {
@@ -91,6 +97,31 @@ export function OrderPage() {
       void queryClient.invalidateQueries({ queryKey: qk.orders.all })
       toast.show('Заказ удалён')
       navigate('/my/orders', { replace: true })
+    },
+  })
+
+  // Only a non-owner executor on an open order needs the proposals list; owners
+  // and customer-mode visitors never fetch it (ruling P28).
+  const mineQuery = useQuery({
+    queryKey: qk.proposals.mine(),
+    queryFn: fetchMyProposals,
+    enabled: canRespond && mode === 'executor',
+  })
+
+  const myProposal = useMemo(
+    () =>
+      mineQuery.data?.find((proposal) => proposal.order_id === id) ?? null,
+    [mineQuery.data, id],
+  )
+
+  const withdraw = useMutation({
+    mutationFn: (proposalId: number) => withdrawProposal(proposalId),
+    onSuccess: async () => {
+      setDialog(null)
+      void queryClient.invalidateQueries({ queryKey: qk.proposals.mine() })
+      void queryClient.invalidateQueries({ queryKey: qk.orders.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: qk.orders.all })
+      toast.show('Отклик отозван')
     },
   })
 
@@ -124,8 +155,6 @@ export function OrderPage() {
     )
   }
 
-  const isOwner = user !== null && user.id === order.customer_id
-  const canRespond = !isOwner && order.status === 'open'
   const priceMissing = order.min_price === null && order.max_price === null
 
   return (
@@ -193,17 +222,8 @@ export function OrderPage() {
       )}
 
       {canRespond && (
-        <Card className="flex flex-col gap-2 p-4">
-          {mode === 'executor' ? (
-            <>
-              <Button disabled title="Форма отклика появится в следующем обновлении">
-                Откликнуться
-              </Button>
-              <p className="text-sm text-muted-strong">
-                Форма отклика появится в следующем обновлении.
-              </p>
-            </>
-          ) : (
+        <Card className="flex flex-col gap-3 p-4">
+          {mode !== 'executor' ? (
             <>
               <p className="text-sm text-muted-strong">
                 Вы в режиме заказчика. Чтобы откликнуться на чужой заказ, переключитесь в режим
@@ -213,6 +233,48 @@ export function OrderPage() {
                 Перейти в режим исполнителя
               </Button>
             </>
+          ) : mineQuery.isLoading ? (
+            // Avoid flashing the form while the proposals list is still loading.
+            <Skeleton className="h-24 w-full" data-testid="proposal-skeleton" />
+          ) : myProposal ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-forest-900">Ваш отклик</h2>
+                <Badge status={myProposal.status} />
+              </div>
+
+              <p className="text-sm text-muted-strong">
+                Оставлен {formatShortDate(myProposal.created_at)}
+              </p>
+
+              <p className="text-sm text-muted-strong">
+                Ваша цена:{' '}
+                <span className="text-base font-semibold text-forest-900">
+                  {formatMoney(myProposal.proposed_price)}
+                </span>
+              </p>
+
+              {myProposal.message && (
+                <p className="text-base whitespace-pre-line text-forest-900">
+                  {myProposal.message}
+                </p>
+              )}
+
+              {myProposal.status === 'pending' && (
+                <Button
+                  variant="secondary"
+                  className="self-start"
+                  onClick={() => setDialog('withdraw')}
+                >
+                  Отозвать
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-lg font-semibold text-forest-900">Откликнуться</h2>
+              <ProposalForm orderId={order.id} maxPrice={order.max_price} />
+            </div>
           )}
         </Card>
       )}
@@ -251,6 +313,22 @@ export function OrderPage() {
           if (remove.isPending) return
           setDialog(null)
           remove.reset()
+        }}
+      />
+      <ConfirmDialog
+        open={dialog === 'withdraw'}
+        title="Отозвать отклик?"
+        description={`Отклик на «${order.title}» будет отозван. Продолжить?`}
+        confirmLabel="Отозвать"
+        pending={withdraw.isPending}
+        error={errorMessage(withdraw.error)}
+        onConfirm={() => {
+          if (myProposal) withdraw.mutate(myProposal.id)
+        }}
+        onCancel={() => {
+          if (withdraw.isPending) return
+          setDialog(null)
+          withdraw.reset()
         }}
       />
     </section>

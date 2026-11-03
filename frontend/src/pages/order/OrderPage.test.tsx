@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router'
-import type { Order, User } from '@/api/types'
+import type { Order, Proposal, User } from '@/api/types'
 import { useSession } from '@/features/auth/session'
 import { setRoleMode } from '@/features/switch-role/model'
 import { server } from '@/test/msw'
@@ -45,6 +45,22 @@ const order: Order = {
 
 function serveOrder(value: Order): void {
   server.use(http.get('/api/v1/orders/1', () => HttpResponse.json(value)))
+}
+
+/** Serves whatever the executor's proposals list currently is (mutable via `list`). */
+function serveMyProposals(list: () => (Proposal & { order: Order })[]): void {
+  server.use(http.get('/api/v1/orders/proposals/my', () => HttpResponse.json(list())))
+}
+
+const myPendingProposal: Proposal & { order: Order } = {
+  id: 30,
+  proposed_price: 2800,
+  message: 'Работаю аккуратно',
+  created_at: '2026-10-30T12:00:00Z',
+  order_id: 1,
+  executor_id: user.id,
+  status: 'pending',
+  order,
 }
 
 function renderOrder() {
@@ -91,15 +107,110 @@ test('own open order shows edit and close actions', async () => {
 
 test('other user open order shows respond action in executor mode', async () => {
   serveOrder({ ...order, customer_id: 99 })
+  serveMyProposals(() => [])
   setRoleMode('executor')
 
   renderOrder()
 
   await screen.findByRole('heading', { name: order.title })
 
-  expect(screen.getByRole('button', { name: 'Откликнуться' })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Откликнуться' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Ваша цена')).toBeInTheDocument()
+  expect(screen.getByText('Вилка заказчика: до 3 500 ₽')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Редактировать' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Закрыть заказ' })).not.toBeInTheDocument()
+})
+
+test('executor creates a proposal and the form swaps to the status card', async () => {
+  let detailFetches = 0
+  let proposals: (Proposal & { order: Order })[] = []
+  let created = 0
+  server.use(
+    http.get('/api/v1/orders/1', () => {
+      detailFetches += 1
+      return HttpResponse.json({ ...order, customer_id: 99 })
+    }),
+    http.get('/api/v1/orders/proposals/my', () => HttpResponse.json(proposals)),
+    http.post('/api/v1/orders/1/proposals', async ({ request }) => {
+      created += 1
+      const body = (await request.json()) as { proposed_price: number }
+      proposals = [
+        {
+          ...myPendingProposal,
+          proposed_price: body.proposed_price,
+          message: null,
+          order: { ...order, customer_id: 99 },
+        },
+      ]
+      return HttpResponse.json(proposals[0])
+    }),
+  )
+  setRoleMode('executor')
+
+  renderOrder()
+
+  await screen.findByRole('button', { name: 'Откликнуться' })
+  const fetchesBefore = detailFetches
+
+  await userEvent.type(screen.getByLabelText('Ваша цена'), '2800')
+  await userEvent.click(screen.getByRole('button', { name: 'Откликнуться' }))
+
+  expect(created).toBe(1)
+  expect(await screen.findByText('Ваш отклик')).toBeInTheDocument()
+  expect(screen.getByText('Ожидает')).toBeInTheDocument()
+  expect(screen.getByText('2 800 ₽')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Ваша цена')).not.toBeInTheDocument()
+  // The detail query is invalidated and refreshed instead of reloading the page.
+  expect(detailFetches).toBeGreaterThan(fetchesBefore)
+})
+
+test('executor sees own pending proposal and can withdraw it', async () => {
+  let proposals: (Proposal & { order: Order })[] = [myPendingProposal]
+  let deleted = 0
+  server.use(
+    http.get('/api/v1/orders/1', () => HttpResponse.json({ ...order, customer_id: 99 })),
+    http.get('/api/v1/orders/proposals/my', () => HttpResponse.json(proposals)),
+    http.delete('/api/v1/orders/proposals/30', () => {
+      deleted += 1
+      proposals = []
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+  setRoleMode('executor')
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+
+  expect(await screen.findByText('Ваш отклик')).toBeInTheDocument()
+  expect(screen.getByText('2 800 ₽')).toBeInTheDocument()
+  expect(screen.getByText('Работаю аккуратно')).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Отозвать' }))
+  const dialog = screen.getByRole('dialog')
+  expect(
+    within(dialog).getByText('Отклик на «Спилить сухое дерево» будет отозван. Продолжить?'),
+  ).toBeInTheDocument()
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Отозвать' }))
+
+  expect(deleted).toBe(1)
+  expect(await screen.findByRole('button', { name: 'Откликнуться' })).toBeInTheDocument()
+})
+
+test('owner order page never fetches my proposals', async () => {
+  serveOrder(order)
+  let proposalFetches = 0
+  serveMyProposals(() => {
+    proposalFetches += 1
+    return []
+  })
+  setRoleMode('executor')
+
+  renderOrder()
+
+  await screen.findByRole('heading', { name: order.title })
+  expect(screen.getByRole('button', { name: 'Редактировать' })).toBeInTheDocument()
+  expect(proposalFetches).toBe(0)
 })
 
 test('customer mode of another user suggests switching roles', async () => {
