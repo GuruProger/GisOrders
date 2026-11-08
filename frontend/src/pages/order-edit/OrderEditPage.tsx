@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { fetchOrder } from '@/api/orders'
 import { createOrder, updateOrder } from '@/api/orders'
 import { qk } from '@/api/queryKeys'
 import { useToast } from '@/app/providers'
+import type { Point } from '@/entities/order/lib/distance'
 import { PickPointMap } from '@/features/pick-point/PickPointMap'
 import { PhotoUploader } from '@/features/upload-photos/PhotoUploader'
 import { TREE_TYPES } from '@/shared/config/trees'
@@ -24,7 +25,7 @@ import {
   toOrderInput,
   type OrderFormValues,
 } from './schema'
-import { clearDraft, loadDraft, saveDraft } from './draft'
+import { clearDraft, draftToFormValues, loadDraft, saveDraft } from './draft'
 
 /** Converts an ISO timestamp into the value a `datetime-local` input expects. */
 function toLocalInput(iso: string): string {
@@ -47,14 +48,15 @@ export function OrderEditPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
 
-  const [point, setPoint] = useState<{ lat: number; lon: number } | null>(null)
+  // The draft is read once: it is the source for form values, the map point
+  // and the uploaded photo list, so a reload restores the whole screen.
+  const [draft] = useState(() => (isEdit ? null : loadDraft()))
+  const [point, setPoint] = useState<Point | null>(draft?.point ?? null)
   const [pointError, setPointError] = useState<string | null>(null)
-  const [photos, setPhotos] = useState<string[]>([])
+  const [photos, setPhotos] = useState<string[]>(draft?.photos ?? [])
+  const [uploading, setUploading] = useState(0)
 
-  // The draft is a create-mode affordance: in edit mode server data wins.
-  const [initialValues] = useState<OrderFormValues>(() =>
-    isEdit ? EMPTY_FORM : (loadDraft() ?? EMPTY_FORM),
-  )
+  const [initialValues] = useState<OrderFormValues>(() => draftToFormValues(draft))
 
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema),
@@ -91,16 +93,20 @@ export function OrderEditPage() {
   }, [order, reset])
 
   // Persist the create-mode draft (debounced inside saveDraft). The immediate
-  // call covers point/photo changes that do not touch the form fields.
+  // call covers point/photo changes that do not touch the form fields; the
+  // first run is skipped so mounting does not echo (or clobber) the stored one.
+  const firstDraftRun = useRef(true)
   useEffect(() => {
     if (isEdit) return
-    const saveCurrent = () => {
+    const persist = () => {
       saveDraft({ ...EMPTY_FORM, ...form.getValues(), point, photos })
     }
-    saveCurrent()
-    const subscription = watch((values) => {
-      saveDraft({ ...EMPTY_FORM, ...values, point, photos })
-    })
+    if (firstDraftRun.current) {
+      firstDraftRun.current = false
+    } else {
+      persist()
+    }
+    const subscription = watch(() => persist())
     return () => subscription.unsubscribe()
   }, [watch, isEdit, point, photos, form])
 
@@ -108,7 +114,7 @@ export function OrderEditPage() {
     mutationFn: (input: Parameters<typeof createOrder>[0]) =>
       isEdit ? updateOrder(orderId as number, input) : createOrder(input),
     onSuccess: async (saved) => {
-      clearDraft()
+      if (!isEdit) clearDraft()
       await queryClient.invalidateQueries({ queryKey: qk.orders.all })
       toast.show(isEdit ? 'Изменения сохранены' : 'Заказ опубликован')
       navigate(`/orders/${saved.id}`)
@@ -120,6 +126,8 @@ export function OrderEditPage() {
       setPointError('Поставьте точку на карте')
       return
     }
+    // Uploads run in parallel; publishing mid-upload would drop them.
+    if (uploading > 0) return
     setPointError(null)
     save.mutate({ ...toOrderInput(values, point), photos })
   })
@@ -279,26 +287,31 @@ export function OrderEditPage() {
         </div>
 
         <Field label="Фотографии" htmlFor="order-photos">
-          <PhotoUploader photos={photos} onChange={setPhotos} disabled={locked} />
+          <PhotoUploader
+            photos={photos}
+            onChange={setPhotos}
+            onUploadingChange={setUploading}
+            disabled={locked}
+          />
         </Field>
 
-        <Field
-          label="Точка на карте"
-          htmlFor="order-point"
-          error={pointError ?? undefined}
-          hint="Клик по карте ставит точку заказа"
-        >
-          <div id="order-point">
-            <PickPointMap
-              point={point}
-              onPick={(next) => {
-                setPoint(next)
-                setPointError(null)
-              }}
-              disabled={locked}
-            />
-          </div>
-        </Field>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-sm font-medium text-forest-900">Точка на карте</legend>
+          <PickPointMap
+            point={point}
+            onPick={(next) => {
+              setPoint(next)
+              setPointError(null)
+            }}
+            disabled={locked}
+          />
+          <p className="text-sm text-muted-strong">Клик по карте ставит точку заказа</p>
+          {pointError && (
+            <p role="alert" className="text-sm text-terracotta-600">
+              {pointError}
+            </p>
+          )}
+        </fieldset>
 
         {save.isError && (
           <p
@@ -309,7 +322,18 @@ export function OrderEditPage() {
           </p>
         )}
 
-        <Button type="submit" loading={save.isPending} disabled={locked} className="self-start">
+        {uploading > 0 && (
+          <p role="status" className="text-sm text-muted-strong">
+            Дождитесь загрузки фото
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          loading={save.isPending}
+          disabled={locked || uploading > 0}
+          className="self-start"
+        >
           {isEdit ? 'Сохранить' : 'Опубликовать'}
         </Button>
       </form>

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import { Button } from '@/shared/ui/Button'
 import { compressImage } from './compress'
@@ -13,14 +13,15 @@ interface PhotoItem {
   file: File
   /** Object URL for the local preview; empty when the browser cannot make one. */
   preview: string
-  status: 'uploading' | 'done' | 'error'
-  url?: string
+  status: 'uploading' | 'error'
 }
 
 export interface PhotoUploaderProps {
   /** Uploaded photo URLs, ordered; controlled by the page. */
   photos: string[]
   onChange(photos: string[]): void
+  /** Number of photos still uploading, so the page can block publishing. */
+  onUploadingChange?(count: number): void
   disabled?: boolean
 }
 
@@ -48,19 +49,37 @@ let nextKey = 0
  * uploads and a per-photo retry. Successful photos are reported to the parent
  * as URLs; failed ones stay in the list until removed or retried.
  */
-export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploaderProps) {
+export function PhotoUploader({
+  photos,
+  onChange,
+  onUploadingChange,
+  disabled = false,
+}: PhotoUploaderProps) {
   const [items, setItems] = useState<PhotoItem[]>([])
   const [rejection, setRejection] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  // Latest photos without re-creating upload callbacks.
+  // Synchronous mirror of the parent value: two uploads can resolve before
+  // React commits the first update, and reading a render snapshot would drop
+  // one of them. Every change goes through `commitPhotos`.
   const photosRef = useRef(photos)
   photosRef.current = photos
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  // Keys with an upload in flight, so a double-click on «Повторить» is a no-op.
+  const inFlight = useRef(new Set<string>())
+
+  function commitPhotos(next: string[]): void {
+    photosRef.current = next
+    onChange(next)
+  }
 
   function patchItem(key: string, patch: Partial<PhotoItem>): void {
     setItems((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
   function upload(item: PhotoItem): void {
+    if (inFlight.current.has(item.key)) return
+    inFlight.current.add(item.key)
     patchItem(item.key, { status: 'uploading' })
     void compressImage(item.file)
       .then((file) => uploadImage(file))
@@ -69,13 +88,31 @@ export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploa
         setItems((current) => current.filter((entry) => entry.key !== item.key))
         revokePreview(item.preview)
         if (!photosRef.current.includes(url)) {
-          onChange([...photosRef.current, url])
+          commitPhotos([...photosRef.current, url])
         }
       })
       .catch(() => {
         patchItem(item.key, { status: 'error' })
       })
+      .finally(() => {
+        inFlight.current.delete(item.key)
+      })
   }
+
+  // Tell the page how many uploads are in flight so it can block publishing.
+  const uploadingCount = items.filter((item) => item.status === 'uploading').length
+  useEffect(() => {
+    onUploadingChange?.(uploadingCount)
+  }, [onUploadingChange, uploadingCount])
+  useEffect(() => () => onUploadingChange?.(0), [onUploadingChange])
+
+  // Revoke previews that are still around when the screen goes away.
+  useEffect(
+    () => () => {
+      for (const item of itemsRef.current) revokePreview(item.preview)
+    },
+    [],
+  )
 
   function addFiles(incoming: File[]): void {
     setRejection(null)
@@ -112,13 +149,10 @@ export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploa
   function removeItem(item: PhotoItem): void {
     revokePreview(item.preview)
     setItems((current) => current.filter((entry) => entry.key !== item.key))
-    if (item.url) {
-      onChange(photosRef.current.filter((url) => url !== item.url))
-    }
   }
 
   function removePhoto(url: string): void {
-    onChange(photosRef.current.filter((entry) => entry !== url))
+    commitPhotos(photosRef.current.filter((entry) => entry !== url))
   }
 
   const uploadedCount = photos.length
@@ -181,7 +215,7 @@ export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploa
                 aria-label={`Удалить фотографию ${index + 1}`}
                 onClick={() => removePhoto(url)}
                 disabled={disabled}
-                className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-forest-900 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+                className="absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-forest-900 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
               >
                 ×
               </button>
@@ -219,7 +253,7 @@ export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploa
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="min-h-7 px-2 py-0 text-xs"
+                    className="min-h-9 px-2 py-0 text-xs"
                     onClick={() => upload(item)}
                   >
                     Повторить
@@ -231,7 +265,7 @@ export function PhotoUploader({ photos, onChange, disabled = false }: PhotoUploa
                 aria-label={`Убрать ${item.file.name}`}
                 onClick={() => removeItem(item)}
                 disabled={disabled}
-                className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-forest-900 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+                className="absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-forest-900 shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
               >
                 ×
               </button>

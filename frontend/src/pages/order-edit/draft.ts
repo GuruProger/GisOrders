@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, getJson, removeItem, setJson } from '@/shared/lib/storage'
-import type { OrderFormValues } from './schema'
+import { EMPTY_FORM, type OrderFormValues } from './schema'
 
 /**
  * Unsaved order form state persisted to `localStorage` so an accidental close
@@ -24,6 +24,25 @@ export function saveDraft(draft: OrderDraft): void {
 
 export function loadDraft(): OrderDraft | null {
   return getJson<OrderDraft>(STORAGE_KEYS.draft)
+}
+
+/**
+ * Turns a stored draft into form values. Older drafts may miss fields, so
+ * every value falls back to the empty form instead of `undefined`.
+ */
+export function draftToFormValues(draft: OrderDraft | null): OrderFormValues {
+  if (draft === null) return EMPTY_FORM
+  return {
+    title: draft.title ?? '',
+    description: draft.description ?? '',
+    min_price: draft.min_price ?? '',
+    max_price: draft.max_price ?? '',
+    deadline: draft.deadline ?? '',
+    address: draft.address ?? '',
+    tree_type: draft.tree_type ?? '',
+    tree_height: draft.tree_height ?? '',
+    tree_diameter: draft.tree_diameter ?? '',
+  }
 }
 
 /** Cancels a pending write and drops the stored draft. */

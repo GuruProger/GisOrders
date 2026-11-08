@@ -3,7 +3,9 @@ import type { OrderInput } from '@/api/orders'
 
 /** Accepts `2500` and `2500,50`; shared by the schema and the submit handler. */
 export function parseNumber(raw: string): number {
-  return Number(raw.trim().replace(',', '.'))
+  const normalized = raw.trim().replace(',', '.')
+  // Reject exponent/hex forms that `Number` would silently accept.
+  return /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(normalized) ? Number(normalized) : Number.NaN
 }
 
 /** `""` or whitespace means "no value" for the optional price bounds. */

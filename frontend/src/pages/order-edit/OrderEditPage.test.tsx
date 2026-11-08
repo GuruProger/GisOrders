@@ -298,6 +298,202 @@ test('creates an order, clears the draft and navigates to it', async () => {
   expect(localStorage.getItem(STORAGE_KEYS.draft)).toBeNull()
 })
 
+test('restores the draft point and photos and publishes them', async () => {
+  let payload: Record<string, unknown> | undefined
+  server.use(
+    http.post('/api/v1/orders/', async ({ request }) => {
+      payload = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json({ ...order, id: 43, ...payload })
+    }),
+  )
+
+  const draft = {
+    title: 'Черновик с точкой',
+    description: 'Описание черновика с точкой и фотографией',
+    min_price: '1000',
+    max_price: '2000',
+    deadline: FUTURE_DEADLINE,
+    address: 'Санкт-Петербург, ул. Тестовая, 1',
+    tree_type: 'берёза',
+    tree_height: '8',
+    tree_diameter: '20',
+    point: { lat: 59.9, lon: 30.3 },
+    photos: ['/media/draft.jpg'],
+  }
+  localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(draft))
+
+  renderCreate()
+
+  expect(screen.getByLabelText('Название')).toHaveValue(draft.title)
+  expect(screen.getByRole('img', { name: 'Фотография 1' })).toHaveAttribute(
+    'src',
+    '/media/draft.jpg',
+  )
+  expect(screen.getByRole('button', { name: 'Точка заказа' })).toBeInTheDocument()
+
+  // The mount effect must not overwrite the restored point and photos.
+  await new Promise((resolve) => setTimeout(resolve, 700))
+  const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.draft) as string)
+  expect(stored.point).toEqual(draft.point)
+  expect(stored.photos).toEqual(draft.photos)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Опубликовать' }))
+
+  expect(await screen.findByText('Карточка заказа')).toBeInTheDocument()
+  expect(payload).toMatchObject({
+    lat: 59.9,
+    lon: 30.3,
+    photos: ['/media/draft.jpg'],
+    min_price: 1000,
+    max_price: 2000,
+  })
+})
+
+test('keeps every photo when uploads finish together', async () => {
+  let payload: Record<string, unknown> | undefined
+  const releases: Array<() => void> = []
+  let uploads = 0
+  server.use(
+    http.post('/api/v1/uploads/images', async () => {
+      await new Promise<void>((resolve) => {
+        releases.push(resolve)
+      })
+      uploads += 1
+      return HttpResponse.json({
+        url: `/media/${uploads}.jpg`,
+        width: 100,
+        height: 80,
+        size: 12,
+        content_type: 'image/jpeg',
+      })
+    }),
+    http.post('/api/v1/orders/', async ({ request }) => {
+      payload = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json({ ...order, id: 44, ...payload })
+    }),
+  )
+
+  renderCreate()
+  await userEvent.upload(screen.getByLabelText('Фотографии'), [
+    imageFile('first.png'),
+    imageFile('second.png'),
+  ])
+
+  await waitFor(() => expect(releases).toHaveLength(2))
+  // Resolve both in one batch: reading a render snapshot here used to drop one.
+  await act(async () => {
+    for (const release of releases) release()
+  })
+
+  expect(await screen.findByRole('img', { name: 'Фотография 1' })).toBeInTheDocument()
+  expect(await screen.findByRole('img', { name: 'Фотография 2' })).toBeInTheDocument()
+  // Finished uploads leave the local list, so no duplicate preview remains.
+  expect(screen.queryByRole('img', { name: 'first.png' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('img', { name: 'second.png' })).not.toBeInTheDocument()
+
+  await fillBaseForm()
+  await pickPoint()
+  await userEvent.click(screen.getByRole('button', { name: 'Опубликовать' }))
+
+  expect(await screen.findByText('Карточка заказа')).toBeInTheDocument()
+  expect(payload?.photos).toHaveLength(2)
+  expect(payload?.photos).toEqual(
+    expect.arrayContaining(['/media/1.jpg', '/media/2.jpg']),
+  )
+})
+
+test('blocks publishing until photos finish uploading', async () => {
+  let posted = 0
+  let release: (() => void) | null = null
+  server.use(
+    http.post('/api/v1/uploads/images', async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return HttpResponse.json({
+        url: '/media/slow.jpg',
+        width: 10,
+        height: 10,
+        size: 1,
+        content_type: 'image/jpeg',
+      })
+    }),
+    http.post('/api/v1/orders/', () => {
+      posted += 1
+      return HttpResponse.json(order)
+    }),
+  )
+
+  renderCreate()
+  await fillBaseForm()
+  await pickPoint()
+  await userEvent.upload(screen.getByLabelText('Фотографии'), imageFile('slow.png'))
+
+  expect(await screen.findByText('Дождитесь загрузки фото')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeDisabled()
+  expect(posted).toBe(0)
+
+  await act(async () => {
+    release?.()
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeEnabled(),
+  )
+})
+
+test('saves an open order with PATCH and keeps another draft intact', async () => {
+  let patched: Record<string, unknown> | undefined
+  server.use(
+    http.get('/api/v1/orders/1', () =>
+      HttpResponse.json({ ...order, photos: ['/media/old.jpg'] }),
+    ),
+    http.patch('/api/v1/orders/1', async ({ request }) => {
+      patched = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json({ ...order, ...patched })
+    }),
+  )
+  localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify({ title: 'Другой черновик' }))
+
+  renderEdit(1)
+  const title = await screen.findByLabelText('Название')
+  await userEvent.clear(title)
+  await userEvent.type(title, 'Обновлённый заголовок')
+  await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+
+  expect(await screen.findByText('Карточка заказа')).toBeInTheDocument()
+  expect(patched).toMatchObject({
+    title: 'Обновлённый заголовок',
+    photos: ['/media/old.jpg'],
+    lat: order.lat,
+    lon: order.lon,
+  })
+  // Editing must not clear the create-mode draft of another order.
+  expect(localStorage.getItem(STORAGE_KEYS.draft)).not.toBeNull()
+})
+
+test('rejects a maximum price below the minimum', async () => {
+  let posted = 0
+  server.use(
+    http.post('/api/v1/orders/', () => {
+      posted += 1
+      return HttpResponse.json(order)
+    }),
+  )
+
+  renderCreate()
+  await fillBaseForm()
+  fireEvent.change(screen.getByLabelText('Цена от'), { target: { value: '5000' } })
+  fireEvent.change(screen.getByLabelText('Цена до'), { target: { value: '1000' } })
+  await pickPoint()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Опубликовать' }))
+
+  expect(
+    await screen.findByText('Максимальная цена не может быть меньше минимальной'),
+  ).toBeInTheDocument()
+  expect(posted).toBe(0)
+})
+
 test('edit mode prefills the order and disables fields when it is not open', async () => {
   server.use(
     http.get('/api/v1/orders/1', () =>
