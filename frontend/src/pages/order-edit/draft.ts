@@ -23,7 +23,28 @@ export function saveDraft(draft: OrderDraft): void {
 }
 
 export function loadDraft(): OrderDraft | null {
-  return getJson<OrderDraft>(STORAGE_KEYS.draft)
+  const draft = getJson<OrderDraft>(STORAGE_KEYS.draft)
+  if (draft === null || typeof draft !== 'object') return null
+
+  // Storage is user-editable: drop malformed point/photo values instead of
+  // letting them reach the map or the photo list.
+  const rawPoint = draft.point as unknown
+  const point =
+    rawPoint !== null &&
+    typeof rawPoint === 'object' &&
+    typeof (rawPoint as { lat?: unknown }).lat === 'number' &&
+    typeof (rawPoint as { lon?: unknown }).lon === 'number' &&
+    Number.isFinite((rawPoint as { lat: number }).lat) &&
+    Number.isFinite((rawPoint as { lon: number }).lon)
+      ? { lat: (rawPoint as { lat: number }).lat, lon: (rawPoint as { lon: number }).lon }
+      : null
+
+  const rawPhotos = draft.photos as unknown
+  const photos = Array.isArray(rawPhotos)
+    ? rawPhotos.filter((url): url is string => typeof url === 'string')
+    : []
+
+  return { ...draftToFormValues(draft), point, photos }
 }
 
 /**

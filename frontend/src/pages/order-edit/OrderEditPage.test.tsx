@@ -8,10 +8,16 @@ import { STORAGE_KEYS } from '@/shared/lib/storage'
 import { mapApi, resetMapApi } from '@/test/mapMocks'
 import { server } from '@/test/msw'
 import { TestProviders } from '@/test/providers'
+import { clearDraft } from './draft'
 import { OrderEditPage } from './OrderEditPage'
 
 vi.mock('react-leaflet', () => import('@/test/mapMocks'))
 vi.mock('@/widgets/map/MarkerClusterGroup', () => import('@/test/mapMocks'))
+
+// A pending debounced write would otherwise land in the next test's storage.
+afterEach(() => {
+  clearDraft()
+})
 
 const user: User = {
   id: 2,
@@ -433,12 +439,56 @@ test('blocks publishing until photos finish uploading', async () => {
   expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeDisabled()
   expect(posted).toBe(0)
 
+  // The handler guard must also cover implicit submission (Enter).
+  fireEvent.submit(document.querySelector('form') as HTMLFormElement)
+  await waitFor(() => expect(posted).toBe(0))
+
   await act(async () => {
     release?.()
   })
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Опубликовать' })).toBeEnabled(),
   )
+})
+
+test('does not resurrect a photo removed while it was uploading', async () => {
+  let release: (() => void) | null = null
+  let posted: Record<string, unknown> | undefined
+  server.use(
+    http.post('/api/v1/uploads/images', async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return HttpResponse.json({
+        url: '/media/late.jpg',
+        width: 10,
+        height: 10,
+        size: 1,
+        content_type: 'image/jpeg',
+      })
+    }),
+    http.post('/api/v1/orders/', async ({ request }) => {
+      posted = (await request.json()) as Record<string, unknown>
+      return HttpResponse.json(order)
+    }),
+  )
+
+  renderCreate()
+  await fillBaseForm()
+  await pickPoint()
+  await userEvent.upload(screen.getByLabelText('Фотографии'), imageFile('late.png'))
+
+  expect(await screen.findByRole('img', { name: 'late.png' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Убрать late.png' }))
+  await act(async () => {
+    release?.()
+  })
+
+  // The late success is ignored: no finished photo and an empty payload.
+  expect(screen.queryByRole('img', { name: /Фотография/ })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Опубликовать' }))
+  expect(await screen.findByText('Карточка заказа')).toBeInTheDocument()
+  expect(posted?.photos).toEqual([])
 })
 
 test('saves an open order with PATCH and keeps another draft intact', async () => {
@@ -467,8 +517,11 @@ test('saves an open order with PATCH and keeps another draft intact', async () =
     lat: order.lat,
     lon: order.lon,
   })
-  // Editing must not clear the create-mode draft of another order.
-  expect(localStorage.getItem(STORAGE_KEYS.draft)).not.toBeNull()
+  // Editing must not clear or rewrite the create-mode draft of another order.
+  await new Promise((resolve) => setTimeout(resolve, 600))
+  expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.draft) as string)).toEqual({
+    title: 'Другой черновик',
+  })
 })
 
 test('rejects a maximum price below the minimum', async () => {

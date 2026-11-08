@@ -67,6 +67,8 @@ export function PhotoUploader({
   itemsRef.current = items
   // Keys with an upload in flight, so a double-click on «Повторить» is a no-op.
   const inFlight = useRef(new Set<string>())
+  // Items removed (or unmounted) mid-upload: their late success is ignored.
+  const cancelled = useRef(new Set<string>())
 
   function commitPhotos(next: string[]): void {
     photosRef.current = next
@@ -84,6 +86,10 @@ export function PhotoUploader({
     void compressImage(item.file)
       .then((file) => uploadImage(file))
       .then((url) => {
+        if (cancelled.current.has(item.key)) {
+          cancelled.current.delete(item.key)
+          return
+        }
         // The parent list renders the finished photo; drop the local item.
         setItems((current) => current.filter((entry) => entry.key !== item.key))
         revokePreview(item.preview)
@@ -92,6 +98,7 @@ export function PhotoUploader({
         }
       })
       .catch(() => {
+        cancelled.current.delete(item.key)
         patchItem(item.key, { status: 'error' })
       })
       .finally(() => {
@@ -106,10 +113,14 @@ export function PhotoUploader({
   }, [onUploadingChange, uploadingCount])
   useEffect(() => () => onUploadingChange?.(0), [onUploadingChange])
 
-  // Revoke previews that are still around when the screen goes away.
+  // Revoke previews that are still around when the screen goes away, and
+  // ignore uploads that resolve after unmount.
   useEffect(
     () => () => {
-      for (const item of itemsRef.current) revokePreview(item.preview)
+      for (const item of itemsRef.current) {
+        revokePreview(item.preview)
+        if (item.status === 'uploading') cancelled.current.add(item.key)
+      }
     },
     [],
   )
@@ -148,6 +159,7 @@ export function PhotoUploader({
 
   function removeItem(item: PhotoItem): void {
     revokePreview(item.preview)
+    if (item.status === 'uploading') cancelled.current.add(item.key)
     setItems((current) => current.filter((entry) => entry.key !== item.key))
   }
 

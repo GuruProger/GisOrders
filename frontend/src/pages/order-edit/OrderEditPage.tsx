@@ -92,20 +92,28 @@ export function OrderEditPage() {
     setPoint({ lat: order.lat, lon: order.lon })
   }, [order, reset])
 
-  // Persist the create-mode draft (debounced inside saveDraft). The immediate
-  // call covers point/photo changes that do not touch the form fields; the
-  // first run is skipped so mounting does not echo (or clobber) the stored one.
-  const firstDraftRun = useRef(true)
+  // Persist the create-mode draft (debounced inside saveDraft). Writing only
+  // when the snapshot changes keeps StrictMode's double mount from creating an
+  // empty draft, while point/photo changes still save immediately (P34).
+  const draftSnapshot = useRef(
+    JSON.stringify({
+      ...EMPTY_FORM,
+      ...draftToFormValues(draft),
+      point: draft?.point ?? null,
+      photos: draft?.photos ?? [],
+    }),
+  )
+
   useEffect(() => {
     if (isEdit) return
     const persist = () => {
-      saveDraft({ ...EMPTY_FORM, ...form.getValues(), point, photos })
+      const snapshot = { ...EMPTY_FORM, ...form.getValues(), point, photos }
+      const serialized = JSON.stringify(snapshot)
+      if (serialized === draftSnapshot.current) return
+      draftSnapshot.current = serialized
+      saveDraft(snapshot)
     }
-    if (firstDraftRun.current) {
-      firstDraftRun.current = false
-    } else {
-      persist()
-    }
+    persist()
     const subscription = watch(() => persist())
     return () => subscription.unsubscribe()
   }, [watch, isEdit, point, photos, form])
