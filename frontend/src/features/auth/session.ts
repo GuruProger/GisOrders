@@ -4,6 +4,7 @@ import { isAuthenticationError } from '@/api/errors'
 import { onSessionExpired, refreshSession } from '@/api/refresh'
 import { setAccessToken } from '@/api/token'
 import type { TokenPair, User } from '@/api/types'
+import { clearPendingMessages } from '@/features/chat/pending'
 import { getRefreshToken, setRefreshToken } from '@/shared/lib/storage'
 
 export type SessionStatus = 'loading' | 'anonymous' | 'authenticated'
@@ -38,6 +39,9 @@ export const useSession = create<SessionState>((set) => ({
   clear: () => {
     setAccessToken(null)
     setRefreshToken(null)
+    // Another account must never inherit this session's queued chat drafts.
+    // `pending.ts` stays free of session imports, so there is no cycle.
+    clearPendingMessages()
     set({ user: null, status: 'anonymous' })
   },
 }))
