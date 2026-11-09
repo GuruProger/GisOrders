@@ -104,6 +104,30 @@ test('delivers event frames and ignores malformed ones', () => {
 
   ws.onmessage?.({ data: 'not json' } as MessageEvent)
   ws.receive({ type: 'pong' })
+  ws.receive({ type: 'message.created', message: {} })
+  ws.receive({ type: 'message.created', message: null })
+  ws.receive({
+    type: 'message.created',
+    message: {
+      id: 5,
+      chat_id: 1,
+      sender_id: 2,
+      text: 'Привет',
+      is_read: false,
+      created_at: 'not-a-date',
+    },
+  })
+  ws.receive({
+    type: 'message.created',
+    message: {
+      id: '5',
+      chat_id: 1,
+      sender_id: 2,
+      text: 'Привет',
+      is_read: false,
+      created_at: '2026-11-09T10:00:00',
+    },
+  })
   ws.receive({
     type: 'message.created',
     message: {
@@ -249,5 +273,51 @@ test('typing and read frames are ignored while offline', () => {
     { type: 'typing', is_typing: true },
     { type: 'read' },
   ])
+  socket.close()
+})
+
+test('stops reconnecting after 4404 and reports the access error', async () => {
+  vi.useFakeTimers()
+  const onError = vi.fn()
+  const socket = createChatSocket({
+    chatId: 1,
+    getToken: () => 'token',
+    onEvent: () => undefined,
+    onStatus: () => undefined,
+    onError,
+  })
+
+  const ws = FakeWebSocket.last()
+  ws.open()
+  ws.serverClose(4404)
+  await vi.advanceTimersByTimeAsync(60000)
+
+  expect(onError).toHaveBeenCalledWith('Нет доступа к чату')
+  expect(FakeWebSocket.instances).toHaveLength(1)
+  socket.close()
+})
+
+test('stops and reports an auth error when the token refresh fails on 4401', async () => {
+  vi.useFakeTimers()
+  refreshSession.mockRejectedValue(new Error('network down'))
+  const onError = vi.fn()
+  const socket = createChatSocket({
+    chatId: 1,
+    getToken: () => 'token',
+    onEvent: () => undefined,
+    onStatus: () => undefined,
+    onError,
+  })
+
+  const ws = FakeWebSocket.last()
+  ws.open()
+  ws.serverClose(4401)
+  await flushPromises()
+  await flushPromises()
+
+  expect(onError).toHaveBeenCalledWith('Не удалось авторизоваться')
+
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(FakeWebSocket.instances).toHaveLength(1)
   socket.close()
 })

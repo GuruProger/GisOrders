@@ -50,9 +50,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function toMessage(value: unknown): Message | null {
+  if (!isRecord(value)) return null
+
+  const { id, chat_id, sender_id, text, is_read, created_at } = value
+  if (
+    typeof id !== 'number' ||
+    !Number.isFinite(id) ||
+    typeof chat_id !== 'number' ||
+    !Number.isFinite(chat_id) ||
+    typeof sender_id !== 'number' ||
+    !Number.isFinite(sender_id) ||
+    typeof text !== 'string' ||
+    typeof is_read !== 'boolean' ||
+    typeof created_at !== 'string' ||
+    Number.isNaN(Date.parse(created_at))
+  ) {
+    return null
+  }
+
+  return { id, chat_id, sender_id, text, is_read, created_at }
+}
+
 function toChatEvent(frame: Record<string, unknown>): ChatEvent | null {
-  if (frame.type === 'message.created' && isRecord(frame.message)) {
-    return { type: 'message.created', message: frame.message as unknown as Message }
+  if (frame.type === 'message.created') {
+    const message = toMessage(frame.message)
+    return message === null ? null : { type: 'message.created', message }
   }
 
   if (

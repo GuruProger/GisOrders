@@ -43,6 +43,14 @@ function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
 }
 
+/**
+ * A failure that is not an HTTP response (offline, DNS, timeout). Such a
+ * message is kept in the single offline queue instead of being rolled back.
+ */
+function isConnectionFailure(error: unknown): boolean {
+  return !(error instanceof ApiError)
+}
+
 /** «Чат»: day-grouped timeline, optimistic sending and realtime updates. */
 export function ChatPage() {
   const { id: rawId } = useParams()
@@ -55,15 +63,20 @@ export function ChatPage() {
 
   const [draft, setDraft] = useState('')
   const [extraMessages, setExtraMessages] = useState<Message[]>([])
+  // The spec allows exactly one message to wait for the connection (7.6).
+  const [pending, setPending] = useState<Message | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [status, setStatus] = useState<'online' | 'offline'>('online')
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
+  const [onlineSignal, setOnlineSignal] = useState(0)
 
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const nearBottom = useRef(true)
   const socketRef = useRef<ChatSocket | null>(null)
+  const previousStatus = useRef<'online' | 'offline'>(status)
+  const flushing = useRef(false)
 
   const query = useQuery({
     queryKey: qk.chats.detail(id),
@@ -90,13 +103,14 @@ export function ChatPage() {
   const messages = useMemo(() => {
     const seen = new Set<number>()
     const merged: Message[] = []
-    for (const message of [...(query.data?.messages ?? []), ...extraMessages]) {
+    const queued = pending === null ? [] : [pending]
+    for (const message of [...(query.data?.messages ?? []), ...extraMessages, ...queued]) {
       if (seen.has(message.id)) continue
       seen.add(message.id)
       merged.push(message)
     }
     return merged
-  }, [query.data?.messages, extraMessages])
+  }, [query.data?.messages, extraMessages, pending])
 
   const groups = useMemo(() => groupMessagesByDay(messages), [messages])
 
@@ -107,6 +121,7 @@ export function ChatPage() {
       return
     }
     await Promise.all([
+      queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) }),
       queryClient.invalidateQueries({ queryKey: qk.chats.unread() }),
       queryClient.invalidateQueries({ queryKey: qk.chats.list() }),
     ])
@@ -128,6 +143,21 @@ export function ChatPage() {
     }
     setTyping(false)
   }, [])
+
+  // `/chats/1` → `/chats/2` reuses this component, so every piece of transient
+  // state has to be dropped when the conversation id changes.
+  useEffect(() => {
+    setDraft('')
+    setExtraMessages([])
+    setPending(null)
+    setSendError(null)
+    setConnectionError(null)
+    setTyping(false)
+    if (typingTimer.current !== null) {
+      clearTimeout(typingTimer.current)
+      typingTimer.current = null
+    }
+  }, [id])
 
   // Mark everything read whenever the chat opens.
   useEffect(() => {
@@ -181,6 +211,7 @@ export function ChatPage() {
         if (viewer !== null && event.user_id === viewer.id) return
         void queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) })
         void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+        void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
       },
     })
 
@@ -190,6 +221,64 @@ export function ChatPage() {
       socketRef.current = null
     }
   }, [id, validId, markRead, queryClient, showTyping, hideTyping])
+
+  // A reconnect can miss messages: refetch the conversation and the counters
+  // as soon as the socket transitions offline → online.
+  useEffect(() => {
+    const previous = previousStatus.current
+    previousStatus.current = status
+    if (status !== 'online' || previous !== 'offline') return
+
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) }),
+      queryClient.invalidateQueries({ queryKey: qk.chats.unread() }),
+      queryClient.invalidateQueries({ queryKey: qk.chats.list() }),
+    ])
+  }, [status, id, queryClient])
+
+  // The browser `online` event is a second signal that the missed messages and
+  // the queued one have to be retried even when the socket is still closed.
+  useEffect(() => {
+    function handleOnline(): void {
+      setOnlineSignal((current) => current + 1)
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) }),
+        queryClient.invalidateQueries({ queryKey: qk.chats.unread() }),
+        queryClient.invalidateQueries({ queryKey: qk.chats.list() }),
+      ])
+    }
+
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [id, queryClient])
+
+  // Flush the single queued message after the socket (or the browser) is back.
+  useEffect(() => {
+    if (status !== 'online' || pending === null || flushing.current) return
+    const queued = pending
+    flushing.current = true
+
+    void (async () => {
+      try {
+        const saved = await sendMessage(id, queued.text)
+        setPending((current) => (current?.id === queued.id ? null : current))
+        setExtraMessages((current) => [
+          ...current.filter((message) => message.id !== queued.id),
+          saved,
+        ])
+        void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
+        void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+      } catch (error) {
+        if (isConnectionFailure(error)) return
+        // A real server rejection must not keep the message queued forever.
+        setPending((current) => (current?.id === queued.id ? null : current))
+        setExtraMessages((current) => current.filter((message) => message.id !== queued.id))
+        setSendError('Не удалось отправить')
+      } finally {
+        flushing.current = false
+      }
+    })()
+  }, [status, pending, onlineSignal, id, queryClient])
 
   // Keep the view pinned to the newest message only for readers already there.
   useEffect(() => {
@@ -204,7 +293,8 @@ export function ChatPage() {
       element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX
   }
 
-  const canSend = draft.trim().length > 0 && draft.length <= MAX_TEXT_LENGTH
+  const canSend =
+    pending === null && draft.trim().length > 0 && draft.length <= MAX_TEXT_LENGTH
 
   async function submit(): Promise<void> {
     if (!canSend) return
@@ -221,6 +311,16 @@ export function ChatPage() {
 
     setDraft('')
     setSendError(null)
+    // Sending clears the peer's «печатает…» immediately.
+    socketRef.current?.sendTyping(false)
+
+    // Offline: keep the single message until the socket comes back instead of
+    // losing it (spec 7.6).
+    if (status === 'offline') {
+      setPending(temporary)
+      return
+    }
+
     setExtraMessages((current) => [...current, temporary])
 
     try {
@@ -231,8 +331,13 @@ export function ChatPage() {
       ])
       void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
       void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
-    } catch {
+    } catch (error) {
       setExtraMessages((current) => current.filter((message) => message.id !== temporary.id))
+      if (isConnectionFailure(error)) {
+        // The HTTP call failed because the network went away: queue it.
+        setPending(temporary)
+        return
+      }
       setSendError('Не удалось отправить')
     }
   }
@@ -261,17 +366,17 @@ export function ChatPage() {
     )
   }
 
-  if (query.isLoading) {
-    return (
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-        <Skeleton className="h-12 w-2/3" />
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-12 w-full" />
-      </section>
-    )
-  }
+  if (chat === undefined) {
+    if (query.isLoading) {
+      return (
+        <section className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+          <Skeleton className="h-12 w-2/3" />
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </section>
+      )
+    }
 
-  if (query.isError || chat === undefined) {
     return (
       <EmptyState
         title="Не удалось загрузить чат"
@@ -321,6 +426,15 @@ export function ChatPage() {
         </p>
       ) : null}
 
+      {query.isError ? (
+        <p
+          role="alert"
+          className="rounded-xl bg-terracotta-50 px-3 py-2 text-sm text-terracotta-600"
+        >
+          Не удалось обновить чат. Показаны сохранённые сообщения.
+        </p>
+      ) : null}
+
       <div
         ref={listRef}
         onScroll={handleScroll}
@@ -330,8 +444,8 @@ export function ChatPage() {
         {messages.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
         ) : (
-          groups.map((group) => (
-            <div key={group.day} className="flex flex-col gap-2">
+          groups.map((group, index) => (
+            <div key={`${group.day}-${index}`} className="flex flex-col gap-2">
               <div className="flex justify-center">
                 <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-medium text-muted-strong">
                   {formatDayLabel(group.day)}
@@ -341,6 +455,7 @@ export function ChatPage() {
               <ul className="flex flex-col gap-2">
                 {group.messages.map((message) => {
                   const own = message.sender_id === myId
+                  const awaiting = pending?.id === message.id
 
                   return (
                     <li
@@ -349,11 +464,13 @@ export function ChatPage() {
                     >
                       <div
                         data-own={own ? 'true' : 'false'}
+                        data-pending={awaiting ? 'true' : 'false'}
                         className={cn(
                           'max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-line',
                           own
                             ? 'bg-moss-600 text-white'
                             : 'border border-line bg-card text-forest-900',
+                          awaiting && 'opacity-70',
                         )}
                       >
                         <p>{message.text}</p>
@@ -364,6 +481,7 @@ export function ChatPage() {
                           )}
                         >
                           {format(new Date(message.created_at), 'HH:mm')}
+                          {awaiting ? ' · Отправляется…' : null}
                         </p>
                       </div>
                     </li>
