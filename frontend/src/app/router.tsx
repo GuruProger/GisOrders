@@ -1,6 +1,8 @@
 import { createBrowserRouter, createRoutesFromElements, Route } from 'react-router'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AppShell } from '@/widgets/app-shell/AppShell'
+import { ChatPage } from '@/pages/chat/ChatPage'
+import { ChatsPage } from '@/pages/chats/ChatsPage'
 import { FeedPage } from '@/pages/feed/FeedPage'
 import { LoginPage } from '@/pages/login/LoginPage'
 import { MapPage } from '@/pages/map/MapPage'
@@ -11,11 +13,6 @@ import { OrderEditPage } from '@/pages/order-edit/OrderEditPage'
 import { OrderPage } from '@/pages/order/OrderPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { RegisterPage } from '@/pages/register/RegisterPage'
-
-/** Temporary heading-only page for routes owned by the next plan. */
-function StubPage({ title }: { title: string }) {
-  return <h1 className="text-2xl font-semibold text-forest-900">{title}</h1>
-}
 
 export const router = createBrowserRouter(
   createRoutesFromElements(
@@ -32,7 +29,8 @@ export const router = createBrowserRouter(
           <Route path="/orders/new" element={<OrderEditPage />} />
           <Route path="/orders/:id/edit" element={<OrderEditPage />} />
           <Route path="/orders/:id" element={<OrderPage />} />
-          <Route path="/chats" element={<StubPage title="Чаты" />} />
+          <Route path="/chats" element={<ChatsPage />} />
+          <Route path="/chats/:id" element={<ChatPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

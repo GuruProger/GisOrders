@@ -6,6 +6,8 @@ export interface NavItem {
   to: string
   label: string
   icon: NavIconName
+  /** Numeric badge rendered by the navigation; `navItems` itself stays pure. */
+  badgeCount?: number
 }
 
 /**

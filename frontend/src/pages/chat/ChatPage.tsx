@@ -1,0 +1,422 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react'
+import { Link, useParams } from 'react-router'
+import { fetchChat, markChatRead, sendMessage } from '@/api/chats'
+import { ApiError } from '@/api/errors'
+import { qk } from '@/api/queryKeys'
+import { getAccessToken } from '@/api/token'
+import type { Message } from '@/api/types'
+import { fetchUser } from '@/api/users'
+import { useSession } from '@/features/auth/session'
+import { formatDayLabel, groupMessagesByDay } from '@/features/chat/group'
+import { createChatSocket, type ChatSocket } from '@/features/chat/socket'
+import { cn } from '@/shared/lib/cn'
+import { useDocumentTitle } from '@/shared/lib/use-document-title'
+import { Avatar } from '@/shared/ui/Avatar'
+import { Button } from '@/shared/ui/Button'
+import { EmptyState } from '@/shared/ui/EmptyState'
+import { Skeleton } from '@/shared/ui/Skeleton'
+import { Textarea } from '@/shared/ui/Textarea'
+
+const NAME_STALE_MS = 5 * 60_000
+const TYPING_TIMEOUT_MS = 3000
+const MAX_TEXT_LENGTH = 2000
+const NEAR_BOTTOM_PX = 80
+
+/** Negative ids keep optimistic messages apart from server ids. */
+let tempMessageId = 0
+
+function nextTempMessageId(): number {
+  tempMessageId -= 1
+  return tempMessageId
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}
+
+/** «Чат»: day-grouped timeline, optimistic sending and realtime updates. */
+export function ChatPage() {
+  const { id: rawId } = useParams()
+  const id = Number(rawId)
+  const validId = Number.isInteger(id) && id > 0
+
+  const queryClient = useQueryClient()
+  const user = useSession((state) => state.user)
+  const myId = user?.id ?? null
+
+  const [draft, setDraft] = useState('')
+  const [extraMessages, setExtraMessages] = useState<Message[]>([])
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [status, setStatus] = useState<'online' | 'offline'>('online')
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [typing, setTyping] = useState(false)
+
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const nearBottom = useRef(true)
+  const socketRef = useRef<ChatSocket | null>(null)
+
+  const query = useQuery({
+    queryKey: qk.chats.detail(id),
+    queryFn: () => fetchChat(id),
+    enabled: validId,
+  })
+
+  const chat = query.data
+  const opponentId =
+    chat === undefined ? null : chat.customer_id === myId ? chat.executor_id : chat.customer_id
+
+  const nameQuery = useQuery({
+    queryKey: qk.users.detail(opponentId ?? 0),
+    queryFn: () => fetchUser(opponentId as number),
+    enabled: opponentId !== null,
+    staleTime: NAME_STALE_MS,
+  })
+
+  const name =
+    nameQuery.data?.username ?? (opponentId === null ? null : `Пользователь #${opponentId}`)
+
+  useDocumentTitle(name ? `${name} — GisOrders` : 'Чат — GisOrders')
+
+  const messages = useMemo(() => {
+    const seen = new Set<number>()
+    const merged: Message[] = []
+    for (const message of [...(query.data?.messages ?? []), ...extraMessages]) {
+      if (seen.has(message.id)) continue
+      seen.add(message.id)
+      merged.push(message)
+    }
+    return merged
+  }, [query.data?.messages, extraMessages])
+
+  const groups = useMemo(() => groupMessagesByDay(messages), [messages])
+
+  const markRead = useCallback(async () => {
+    try {
+      await markChatRead(id)
+    } catch {
+      return
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: qk.chats.unread() }),
+      queryClient.invalidateQueries({ queryKey: qk.chats.list() }),
+    ])
+  }, [id, queryClient])
+
+  const showTyping = useCallback(() => {
+    setTyping(true)
+    if (typingTimer.current !== null) clearTimeout(typingTimer.current)
+    typingTimer.current = setTimeout(() => {
+      typingTimer.current = null
+      setTyping(false)
+    }, TYPING_TIMEOUT_MS)
+  }, [])
+
+  const hideTyping = useCallback(() => {
+    if (typingTimer.current !== null) {
+      clearTimeout(typingTimer.current)
+      typingTimer.current = null
+    }
+    setTyping(false)
+  }, [])
+
+  // Mark everything read whenever the chat opens.
+  useEffect(() => {
+    if (!validId) return
+    void markRead()
+  }, [validId, markRead])
+
+  useEffect(
+    () => () => {
+      if (typingTimer.current !== null) clearTimeout(typingTimer.current)
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!validId) return
+
+    const socket = createChatSocket({
+      chatId: id,
+      getToken: getAccessToken,
+      onStatus: setStatus,
+      onError: setConnectionError,
+      onEvent: (event) => {
+        if (event.type === 'message.created') {
+          const incoming = event.message
+          setExtraMessages((current) =>
+            current.some((message) => message.id === incoming.id)
+              ? current
+              : [...current, incoming],
+          )
+
+          const viewer = useSession.getState().user
+          if (viewer === null || incoming.sender_id !== viewer.id) {
+            if (document.visibilityState !== 'hidden') void markRead()
+            void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+            void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
+          }
+          return
+        }
+
+        if (event.type === 'typing') {
+          const viewer = useSession.getState().user
+          if (viewer !== null && event.user_id === viewer.id) return
+          if (event.is_typing) showTyping()
+          else hideTyping()
+          return
+        }
+
+        // The other participant read our messages.
+        const viewer = useSession.getState().user
+        if (viewer !== null && event.user_id === viewer.id) return
+        void queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) })
+        void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+      },
+    })
+
+    socketRef.current = socket
+    return () => {
+      socket.close()
+      socketRef.current = null
+    }
+  }, [id, validId, markRead, queryClient, showTyping, hideTyping])
+
+  // Keep the view pinned to the newest message only for readers already there.
+  useEffect(() => {
+    const element = listRef.current
+    if (element && nearBottom.current) element.scrollTop = element.scrollHeight
+  }, [messages.length])
+
+  function handleScroll(): void {
+    const element = listRef.current
+    if (!element) return
+    nearBottom.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX
+  }
+
+  const canSend = draft.trim().length > 0 && draft.length <= MAX_TEXT_LENGTH
+
+  async function submit(): Promise<void> {
+    if (!canSend) return
+
+    const text = draft
+    const temporary: Message = {
+      id: nextTempMessageId(),
+      chat_id: id,
+      sender_id: myId ?? 0,
+      text,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    }
+
+    setDraft('')
+    setSendError(null)
+    setExtraMessages((current) => [...current, temporary])
+
+    try {
+      const saved = await sendMessage(id, text)
+      setExtraMessages((current) => [
+        ...current.filter((message) => message.id !== temporary.id),
+        saved,
+      ])
+      void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
+      void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+    } catch {
+      setExtraMessages((current) => current.filter((message) => message.id !== temporary.id))
+      setSendError('Не удалось отправить')
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      void submit()
+    }
+  }
+
+  if (!validId || isNotFound(query.error)) {
+    return (
+      <EmptyState
+        title="Чат не найден"
+        description="Возможно, ссылка устарела или переписка закрыта."
+        action={
+          <Link
+            to="/chats"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+          >
+            К чатам
+          </Link>
+        }
+      />
+    )
+  }
+
+  if (query.isLoading) {
+    return (
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+        <Skeleton className="h-12 w-2/3" />
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </section>
+    )
+  }
+
+  if (query.isError || chat === undefined) {
+    return (
+      <EmptyState
+        title="Не удалось загрузить чат"
+        description="Проверьте соединение и попробуйте ещё раз."
+        action={<Button onClick={() => void query.refetch()}>Повторить</Button>}
+      />
+    )
+  }
+
+  return (
+    <section className="mx-auto flex w-full max-w-3xl flex-col gap-3 pb-6">
+      <header className="flex flex-col gap-2 border-b border-line pb-3">
+        <Link
+          to="/chats"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+        >
+          ← К чатам
+        </Link>
+
+        <div className="flex items-center gap-3">
+          <Avatar name={name} className="size-10" />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold text-forest-900">{name}</h1>
+            <Link
+              to={`/orders/${chat.order_id}`}
+              className="inline-flex min-h-11 items-center text-sm text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+            >
+              К заказу
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {connectionError ? (
+        <p
+          role="alert"
+          className="rounded-xl bg-terracotta-50 px-3 py-2 text-sm text-terracotta-600"
+        >
+          {connectionError}
+        </p>
+      ) : status === 'offline' ? (
+        <p
+          role="status"
+          className="rounded-xl bg-sage-100 px-3 py-2 text-sm text-muted-strong"
+        >
+          Нет связи, переподключаемся
+        </p>
+      ) : null}
+
+      <div
+        ref={listRef}
+        onScroll={handleScroll}
+        data-testid="chat-messages"
+        className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-3"
+      >
+        {messages.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
+        ) : (
+          groups.map((group) => (
+            <div key={group.day} className="flex flex-col gap-2">
+              <div className="flex justify-center">
+                <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-medium text-muted-strong">
+                  {formatDayLabel(group.day)}
+                </span>
+              </div>
+
+              <ul className="flex flex-col gap-2">
+                {group.messages.map((message) => {
+                  const own = message.sender_id === myId
+
+                  return (
+                    <li
+                      key={message.id}
+                      className={cn('flex', own ? 'justify-end' : 'justify-start')}
+                    >
+                      <div
+                        data-own={own ? 'true' : 'false'}
+                        className={cn(
+                          'max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-line',
+                          own
+                            ? 'bg-moss-600 text-white'
+                            : 'border border-line bg-card text-forest-900',
+                        )}
+                      >
+                        <p>{message.text}</p>
+                        <p
+                          className={cn(
+                            'mt-1 text-[11px]',
+                            own ? 'text-sage-100' : 'text-muted',
+                          )}
+                        >
+                          {format(new Date(message.created_at), 'HH:mm')}
+                        </p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))
+        )}
+      </div>
+
+      {typing ? (
+        <p aria-live="polite" className="text-sm text-muted-strong">
+          печатает…
+        </p>
+      ) : null}
+
+      {sendError ? (
+        <p role="alert" className="text-sm text-terracotta-600">
+          {sendError}
+        </p>
+      ) : null}
+
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void submit()
+        }}
+      >
+        <Textarea
+          aria-label="Сообщение"
+          rows={1}
+          value={draft}
+          placeholder="Напишите сообщение…"
+          className="min-h-11 resize-none"
+          onChange={(event) => {
+            const value = event.target.value
+            setDraft(value)
+            setSendError(null)
+            socketRef.current?.sendTyping(value.trim().length > 0)
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        <Button
+          type="submit"
+          aria-label="Отправить"
+          className="size-11 shrink-0"
+          disabled={!canSend}
+        >
+          <span aria-hidden="true">→</span>
+        </Button>
+      </form>
+    </section>
+  )
+}

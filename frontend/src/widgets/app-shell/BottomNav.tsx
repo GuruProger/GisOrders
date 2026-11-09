@@ -1,11 +1,14 @@
 import { NavLink } from 'react-router'
 import type { RoleMode } from '@/features/switch-role/model'
 import { cn } from '@/shared/lib/cn'
+import { UnreadBadge } from '@/shared/ui/UnreadBadge'
 import { NavIcon } from './NavIcon'
 import { navItems } from './nav-items'
 
 export interface BottomNavProps {
   mode: RoleMode
+  /** Unread messages total; only the chat item renders it. */
+  unreadCount?: number
 }
 
 const linkClasses = ({ isActive }: { isActive: boolean }): string =>
@@ -15,7 +18,7 @@ const linkClasses = ({ isActive }: { isActive: boolean }): string =>
   )
 
 /** Fixed bottom navigation shown below the 1024 px breakpoint. */
-export function BottomNav({ mode }: BottomNavProps) {
+export function BottomNav({ mode, unreadCount = 0 }: BottomNavProps) {
   return (
     <nav
       role="navigation"
@@ -28,6 +31,7 @@ export function BottomNav({ mode }: BottomNavProps) {
             <NavLink to={item.to} end={item.to === '/'} className={linkClasses}>
               <NavIcon name={item.icon} />
               <span>{item.label}</span>
+              {item.to === '/chats' ? <UnreadBadge count={unreadCount} /> : null}
             </NavLink>
           </li>
         ))}

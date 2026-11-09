@@ -1,7 +1,12 @@
+import { useQuery } from '@tanstack/react-query'
 import { useSyncExternalStore } from 'react'
 import { NavLink, Outlet } from 'react-router'
+import { fetchUnreadCount } from '@/api/chats'
+import { qk } from '@/api/queryKeys'
+import { useSession } from '@/features/auth/session'
 import { useRoleMode, type RoleMode } from '@/features/switch-role/model'
 import { cn } from '@/shared/lib/cn'
+import { UnreadBadge } from '@/shared/ui/UnreadBadge'
 import { BottomNav } from './BottomNav'
 import { Header } from './Header'
 import { NavIcon } from './NavIcon'
@@ -38,7 +43,7 @@ const tabClasses = ({ isActive }: { isActive: boolean }): string =>
   )
 
 /** Inline tab row shown from 1024 px upwards. */
-function DesktopNav({ mode }: { mode: RoleMode }) {
+function DesktopNav({ mode, unreadCount = 0 }: { mode: RoleMode; unreadCount?: number }) {
   return (
     <nav
       role="navigation"
@@ -51,6 +56,7 @@ function DesktopNav({ mode }: { mode: RoleMode }) {
             <NavLink to={item.to} end={item.to === '/'} className={tabClasses}>
               <NavIcon name={item.icon} />
               <span>{item.label}</span>
+              {item.to === '/chats' ? <UnreadBadge count={unreadCount} /> : null}
             </NavLink>
           </li>
         ))}
@@ -67,12 +73,23 @@ function DesktopNav({ mode }: { mode: RoleMode }) {
 export function AppShell() {
   const [mode] = useRoleMode()
   const isDesktop = useIsDesktop()
+  const status = useSession((state) => state.status)
+
+  // One shared unread counter feeds both navigation variants (ruling P37).
+  const unread = useQuery({
+    queryKey: qk.chats.unread(),
+    queryFn: fetchUnreadCount,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    enabled: status === 'authenticated',
+  })
+  const unreadCount = unread.data ?? 0
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface">
       <Header />
 
-      {isDesktop ? <DesktopNav mode={mode} /> : null}
+      {isDesktop ? <DesktopNav mode={mode} unreadCount={unreadCount} /> : null}
 
       <main
         className={cn(
@@ -83,7 +100,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      {isDesktop ? null : <BottomNav mode={mode} />}
+      {isDesktop ? null : <BottomNav mode={mode} unreadCount={unreadCount} />}
     </div>
   )
 }
