@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
 } from 'react'
 import { Link, useParams } from 'react-router'
@@ -17,6 +18,12 @@ import type { Message } from '@/api/types'
 import { fetchUser } from '@/api/users'
 import { useSession } from '@/features/auth/session'
 import { formatDayLabel, groupMessagesByDay } from '@/features/chat/group'
+import {
+  clearPendingMessage,
+  getPendingMessage,
+  setPendingMessage,
+  subscribePending,
+} from '@/features/chat/pending'
 import { createChatSocket, type ChatSocket } from '@/features/chat/socket'
 import { cn } from '@/shared/lib/cn'
 import { useDocumentTitle } from '@/shared/lib/use-document-title'
@@ -45,7 +52,7 @@ function isNotFound(error: unknown): boolean {
 
 /**
  * A failure that is not an HTTP response (offline, DNS, timeout). Such a
- * message is kept in the single offline queue instead of being rolled back.
+ * message is kept in the per-chat queue instead of being rolled back.
  */
 function isConnectionFailure(error: unknown): boolean {
   return !(error instanceof ApiError)
@@ -63,8 +70,13 @@ export function ChatPage() {
 
   const [draft, setDraft] = useState('')
   const [extraMessages, setExtraMessages] = useState<Message[]>([])
-  // The spec allows exactly one message to wait for the connection (7.6).
-  const [pending, setPending] = useState<Message | null>(null)
+  // The queue lives outside the component: it is keyed by chat id and has to
+  // survive `/chats/1 → /chats/2` and a temporary unmount.
+  const pending = useSyncExternalStore(
+    subscribePending,
+    () => getPendingMessage(id),
+    () => null,
+  )
   const [sendError, setSendError] = useState<string | null>(null)
   const [status, setStatus] = useState<'online' | 'offline'>('online')
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -76,7 +88,9 @@ export function ChatPage() {
   const nearBottom = useRef(true)
   const socketRef = useRef<ChatSocket | null>(null)
   const previousStatus = useRef<'online' | 'offline'>(status)
-  const flushing = useRef(false)
+  const flushingChats = useRef(new Set<number>())
+  const currentChatId = useRef(id)
+  currentChatId.current = id
 
   const query = useQuery({
     queryKey: qk.chats.detail(id),
@@ -149,7 +163,6 @@ export function ChatPage() {
   useEffect(() => {
     setDraft('')
     setExtraMessages([])
-    setPending(null)
     setSendError(null)
     setConnectionError(null)
     setTyping(false)
@@ -240,7 +253,11 @@ export function ChatPage() {
   // the queued one have to be retried even when the socket is still closed.
   useEffect(() => {
     function handleOnline(): void {
+      if (!validId) return
       setOnlineSignal((current) => current + 1)
+      // Do not wait for the socket's backoff timer when the browser already
+      // knows the network is back.
+      socketRef.current?.reconnectNow()
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: qk.chats.detail(id) }),
         queryClient.invalidateQueries({ queryKey: qk.chats.unread() }),
@@ -250,35 +267,42 @@ export function ChatPage() {
 
     window.addEventListener('online', handleOnline)
     return () => window.removeEventListener('online', handleOnline)
-  }, [id, queryClient])
+  }, [id, validId, queryClient])
 
-  // Flush the single queued message after the socket (or the browser) is back.
+  // Flush the queued message of the current chat after the socket (or the
+  // browser) is back. The request uses the message's own chat id so a late
+  // navigation can never send it to another conversation.
   useEffect(() => {
-    if (status !== 'online' || pending === null || flushing.current) return
+    if (status !== 'online' || pending === null) return
     const queued = pending
-    flushing.current = true
+    const chatId = queued.chat_id
+    if (flushingChats.current.has(chatId)) return
+    flushingChats.current.add(chatId)
 
     void (async () => {
       try {
-        const saved = await sendMessage(id, queued.text)
-        setPending((current) => (current?.id === queued.id ? null : current))
+        const saved = await sendMessage(chatId, queued.text)
+        clearPendingMessage(chatId, queued.id)
+        void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
+        void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+        if (currentChatId.current !== chatId) return
         setExtraMessages((current) => [
           ...current.filter((message) => message.id !== queued.id),
           saved,
         ])
-        void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
-        void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
-      } catch (error) {
-        if (isConnectionFailure(error)) return
-        // A real server rejection must not keep the message queued forever.
-        setPending((current) => (current?.id === queued.id ? null : current))
+      } catch {
+        // While the chat is open a failed flush must never wedge the
+        // composer: roll it back and let the user send again. While another
+        // chat is open the message stays queued for its own conversation.
+        if (currentChatId.current !== chatId) return
+        clearPendingMessage(chatId, queued.id)
         setExtraMessages((current) => current.filter((message) => message.id !== queued.id))
         setSendError('Не удалось отправить')
       } finally {
-        flushing.current = false
+        flushingChats.current.delete(chatId)
       }
     })()
-  }, [status, pending, onlineSignal, id, queryClient])
+  }, [status, pending, onlineSignal, queryClient])
 
   // Keep the view pinned to the newest message only for readers already there.
   useEffect(() => {
@@ -299,10 +323,11 @@ export function ChatPage() {
   async function submit(): Promise<void> {
     if (!canSend) return
 
+    const chatId = id
     const text = draft
     const temporary: Message = {
       id: nextTempMessageId(),
-      chat_id: id,
+      chat_id: chatId,
       sender_id: myId ?? 0,
       text,
       is_read: false,
@@ -315,27 +340,34 @@ export function ChatPage() {
     socketRef.current?.sendTyping(false)
 
     // Offline: keep the single message until the socket comes back instead of
-    // losing it (spec 7.6).
+    // losing it (spec 7.6). The queue is keyed by the chat it was written in.
     if (status === 'offline') {
-      setPending(temporary)
+      setPendingMessage(chatId, temporary)
       return
     }
 
     setExtraMessages((current) => [...current, temporary])
 
     try {
-      const saved = await sendMessage(id, text)
+      const saved = await sendMessage(chatId, text)
+      void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
+      void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
+      if (currentChatId.current !== chatId) return
       setExtraMessages((current) => [
         ...current.filter((message) => message.id !== temporary.id),
         saved,
       ])
-      void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
-      void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
     } catch (error) {
+      if (currentChatId.current !== chatId) {
+        // The user already left: keep a failed message queued for its own
+        // chat, never for the one that happens to be rendered now.
+        if (isConnectionFailure(error)) setPendingMessage(chatId, temporary)
+        return
+      }
       setExtraMessages((current) => current.filter((message) => message.id !== temporary.id))
       if (isConnectionFailure(error)) {
         // The HTTP call failed because the network went away: queue it.
-        setPending(temporary)
+        setPendingMessage(chatId, temporary)
         return
       }
       setSendError('Не удалось отправить')

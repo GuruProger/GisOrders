@@ -16,6 +16,7 @@ export interface ChatSocketOptions {
 
 export interface ChatSocket {
   close(): void
+  reconnectNow(): void
   sendTyping(isTyping: boolean): void
   sendRead(): void
 }
@@ -218,6 +219,14 @@ export function createChatSocket(options: ChatSocketOptions): ChatSocket {
       const current = socket
       socket = null
       current?.close()
+    },
+    reconnectNow() {
+      if (closed || stopped) return
+      // An open or handshaking socket is already the fast path.
+      if (socket !== null && (socket.readyState === 0 || socket.readyState === OPEN)) return
+      clearTimer()
+      attempt = 0
+      connect()
     },
     sendTyping(isTyping: boolean) {
       send({ type: 'typing', is_typing: isTyping })

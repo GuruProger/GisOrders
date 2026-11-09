@@ -6,6 +6,7 @@ import { Route, Routes, useNavigate } from 'react-router'
 import { qk } from '@/api/queryKeys'
 import type { Chat, Message, User } from '@/api/types'
 import { useSession } from '@/features/auth/session'
+import { resetPendingMessages } from '@/features/chat/pending'
 import { FakeWebSocket, installFakeWebSocket, uninstallFakeWebSocket } from '@/test/fakeSocket'
 import { server } from '@/test/msw'
 import { TestProviders } from '@/test/providers'
@@ -74,6 +75,15 @@ function serveDefaults(): void {
   )
 }
 
+function serveSecondChat(): void {
+  server.use(
+    http.get('/api/v1/chats/2', () =>
+      HttpResponse.json({ ...chat, id: 2, last_message: null, unread_count: 0, messages: [] }),
+    ),
+    http.post('/api/v1/chats/2/read', () => HttpResponse.json({ message: 'Отмечено' })),
+  )
+}
+
 function renderPage() {
   return render(
     <TestProviders initialEntries={['/chats/1']}>
@@ -81,6 +91,28 @@ function renderPage() {
         <Route path="/chats/:id" element={<ChatPage />} />
         <Route path="/chats" element={<p>Чаты</p>} />
         <Route path="/orders/:id" element={<p>Заказ</p>} />
+      </Routes>
+    </TestProviders>,
+  )
+}
+
+/** Renders the chat route with buttons that keep the same component instance. */
+function renderSwitchable() {
+  function SwitchChat() {
+    const navigate = useNavigate()
+    return (
+      <div>
+        <button onClick={() => navigate('/chats/1')}>Первый чат</button>
+        <button onClick={() => navigate('/chats/2')}>Второй чат</button>
+      </div>
+    )
+  }
+
+  return render(
+    <TestProviders initialEntries={['/chats/1']}>
+      <SwitchChat />
+      <Routes>
+        <Route path="/chats/:id" element={<ChatPage />} />
       </Routes>
     </TestProviders>,
   )
@@ -106,6 +138,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 
 beforeEach(() => {
   localStorage.clear()
+  resetPendingMessages()
   useSession.setState({ user, status: 'authenticated' })
   installFakeWebSocket()
   serveDefaults()
@@ -408,6 +441,288 @@ test('queues one message while offline and flushes it after reconnect', async ()
     expect(bubble('Офлайн-сообщение')).toHaveAttribute('data-pending', 'false'),
   )
   expect(screen.getAllByText('Офлайн-сообщение')).toHaveLength(1)
+})
+
+test('does not move a failed online message into another chat', async () => {
+  serveSecondChat()
+  const saved: Message = {
+    id: 501,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Сообщение первого чата',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  let attempts = 0
+  const retryResponses: Array<(response: Response) => void> = []
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      attempts += 1
+      if (attempts === 1) return HttpResponse.error()
+      return new Promise<Response>((resolve) => {
+        retryResponses.push(resolve)
+      })
+    }),
+  )
+  const sendToSecond = vi.fn(() =>
+    HttpResponse.json({ ...saved, id: 502, chat_id: 2, text: 'Сообщение второго чата' }),
+  )
+  server.use(http.post('/api/v1/chats/2/messages', sendToSecond))
+
+  renderSwitchable()
+  await screen.findByText('Иван')
+  openSocket()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Сообщение первого чата')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+
+  await waitFor(() =>
+    expect(bubble('Сообщение первого чата')).toHaveAttribute('data-pending', 'true'),
+  )
+  // The online send failed and the flush retry is still in flight.
+  await waitFor(() => expect(attempts).toBe(2))
+
+  await userEvent.click(screen.getByRole('button', { name: 'Второй чат' }))
+  await screen.findByText('Сообщений пока нет')
+
+  expect(sendToSecond).not.toHaveBeenCalled()
+  expect(screen.queryByText('Сообщение первого чата')).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+  // The late response belongs to chat 1 and must not touch chat 2.
+  await act(async () => {
+    retryResponses[0]?.(HttpResponse.json(saved))
+  })
+
+  expect(screen.queryByText('Сообщение первого чата')).not.toBeInTheDocument()
+  expect(screen.getByText('Сообщений пока нет')).toBeInTheDocument()
+})
+
+test('retains an offline queued message for its chat while visiting another', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  serveSecondChat()
+  const saved: Message = {
+    id: 510,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Офлайн первого чата',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  const send = vi.fn(() => HttpResponse.json(saved))
+  server.use(http.post('/api/v1/chats/1/messages', send))
+
+  renderSwitchable()
+  await screen.findByText('Иван')
+  const first = openSocket()
+  act(() => {
+    first.serverClose(1006)
+  })
+  expect(await screen.findByText('Нет связи, переподключаемся')).toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Офлайн первого чата')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(bubble('Офлайн первого чата')).toHaveAttribute('data-pending', 'true')
+
+  await userEvent.click(screen.getByRole('button', { name: 'Второй чат' }))
+  await screen.findByText('Сообщений пока нет')
+  expect(screen.queryByText('Офлайн первого чата')).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Первый чат' }))
+  expect(await screen.findByText('Офлайн первого чата')).toBeInTheDocument()
+  expect(bubble('Офлайн первого чата')).toHaveAttribute('data-pending', 'true')
+  expect(send).not.toHaveBeenCalled()
+
+  // Reconnecting the reopened chat flushes the retained message for chat 1.
+  const reopened = FakeWebSocket.last()
+  act(() => {
+    reopened.open()
+    reopened.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+  await waitFor(() =>
+    expect(bubble('Офлайн первого чата')).toHaveAttribute('data-pending', 'false'),
+  )
+})
+
+test('reconnects immediately on the browser online event', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  const saved: Message = {
+    id: 520,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Офлайн-событие',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  const send = vi.fn(() => HttpResponse.json(saved))
+  server.use(http.post('/api/v1/chats/1/messages', send))
+
+  renderPage()
+  await screen.findByText('Иван')
+  const first = openSocket()
+  act(() => {
+    first.serverClose(1006)
+  })
+  expect(await screen.findByText('Нет связи, переподключаемся')).toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Офлайн-событие')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(bubble('Офлайн-событие')).toHaveAttribute('data-pending', 'true')
+  expect(send).not.toHaveBeenCalled()
+
+  act(() => {
+    window.dispatchEvent(new Event('online'))
+  })
+
+  // No waiting for the backoff timer: a new socket exists right away.
+  expect(FakeWebSocket.instances).toHaveLength(2)
+  const second = FakeWebSocket.last()
+  act(() => {
+    second.open()
+    second.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+  expect(FakeWebSocket.instances).toHaveLength(2)
+})
+
+test('flushes once when the socket and the browser both report the connection', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  const saved: Message = {
+    id: 530,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Один раз',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  const send = vi.fn(() => HttpResponse.json(saved))
+  server.use(http.post('/api/v1/chats/1/messages', send))
+
+  renderPage()
+  await screen.findByText('Иван')
+  const first = openSocket()
+  act(() => {
+    first.serverClose(1006)
+  })
+  expect(await screen.findByText('Нет связи, переподключаемся')).toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Один раз')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(bubble('Один раз')).toHaveAttribute('data-pending', 'true')
+
+  act(() => {
+    window.dispatchEvent(new Event('online'))
+  })
+  expect(FakeWebSocket.instances).toHaveLength(2)
+  const second = FakeWebSocket.last()
+
+  act(() => {
+    second.open()
+    second.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+    window.dispatchEvent(new Event('online'))
+  })
+
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  expect(send).toHaveBeenCalledTimes(1)
+})
+
+test('rolls back a queued message when its online flush hits a network error', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  const saved: Message = {
+    id: 540,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Вторая попытка',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  let attempts = 0
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      attempts += 1
+      if (attempts === 1) return HttpResponse.error()
+      return HttpResponse.json(saved)
+    }),
+  )
+
+  renderPage()
+  await screen.findByText('Иван')
+  const first = openSocket()
+  act(() => {
+    first.serverClose(1006)
+  })
+  expect(await screen.findByText('Нет связи, переподключаемся')).toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Сбойная отправка')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(bubble('Сбойная отправка')).toHaveAttribute('data-pending', 'true')
+
+  await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 3000 })
+  const second = FakeWebSocket.last()
+  act(() => {
+    second.open()
+    second.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось отправить')
+  expect(screen.queryByText('Сбойная отправка')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Вторая попытка')
+  const retry = screen.getByRole('button', { name: 'Отправить' })
+  expect(retry).toBeEnabled()
+  await userEvent.click(retry)
+
+  expect(await screen.findByText('Вторая попытка')).toBeInTheDocument()
+  expect(attempts).toBe(2)
+})
+
+test('clears the peer typing state when the message is submitted', async () => {
+  const saved: Message = {
+    id: 550,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'С отправкой',
+    is_read: false,
+    created_at: localIso(0, 10),
+  }
+  server.use(http.post('/api/v1/chats/1/messages', () => HttpResponse.json(saved)))
+
+  renderPage()
+  await screen.findByText('Иван')
+  const socket = openSocket()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'С отправкой')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+
+  await waitFor(() =>
+    expect(socket.sentJson()).toContainEqual({ type: 'typing', is_typing: false }),
+  )
+})
+
+test('ignores the browser online event for an invalid chat id', async () => {
+  const invalidate = spyInvalidate()
+
+  render(
+    <TestProviders initialEntries={['/chats/nope']}>
+      <Routes>
+        <Route path="/chats/:id" element={<ChatPage />} />
+      </Routes>
+    </TestProviders>,
+  )
+
+  expect(await screen.findByText('Чат не найден')).toBeInTheDocument()
+  invalidate.mockClear()
+
+  act(() => {
+    window.dispatchEvent(new Event('online'))
+  })
+
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: qk.chats.detail(Number.NaN) })
 })
 
 test('rollback removes only the failed optimistic message', async () => {

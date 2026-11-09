@@ -235,6 +235,36 @@ test('refreshes the session once on 4401 and reconnects', async () => {
   socket.close()
 })
 
+test('reconnectNow clears the backoff and connects immediately', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+
+  const socket = createChatSocket({
+    chatId: 1,
+    getToken: () => 'token',
+    onEvent: () => undefined,
+    onStatus: () => undefined,
+  })
+
+  const first = FakeWebSocket.last()
+  first.open()
+  first.serverClose(1006)
+
+  expect(FakeWebSocket.instances).toHaveLength(1)
+
+  socket.reconnectNow()
+
+  expect(FakeWebSocket.instances).toHaveLength(2)
+  const second = FakeWebSocket.last()
+  second.open()
+  second.receive({ type: 'auth.ok', chat_id: 1, user_id: 2 })
+
+  // The cancelled backoff timer must not open a third socket afterwards.
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(FakeWebSocket.instances).toHaveLength(2)
+  socket.close()
+})
+
 test('close prevents any further reconnect', async () => {
   vi.useFakeTimers()
   const socket = createChatSocket({
