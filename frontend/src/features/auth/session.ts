@@ -4,6 +4,7 @@ import { isAuthenticationError } from '@/api/errors'
 import { onSessionExpired, refreshSession } from '@/api/refresh'
 import { setAccessToken } from '@/api/token'
 import type { TokenPair, User } from '@/api/types'
+import { clearPendingMessages } from '@/features/chat/pending'
 import { getRefreshToken, setRefreshToken } from '@/shared/lib/storage'
 
 export type SessionStatus = 'loading' | 'anonymous' | 'authenticated'
@@ -12,6 +13,8 @@ export interface SessionState {
   user: User | null
   status: SessionStatus
   setSession: (pair: TokenPair) => void
+  /** Replaces the profile after a successful `PATCH /users/me` (ruling P40). */
+  setUser: (user: User) => void
   clear: () => void
 }
 
@@ -29,9 +32,16 @@ export const useSession = create<SessionState>((set) => ({
     set({ user: pair.user, status: 'authenticated' })
   },
 
+  setUser: (user) => {
+    set({ user })
+  },
+
   clear: () => {
     setAccessToken(null)
     setRefreshToken(null)
+    // Another account must never inherit this session's queued chat drafts.
+    // `pending.ts` stays free of session imports, so there is no cycle.
+    clearPendingMessages()
     set({ user: null, status: 'anonymous' })
   },
 }))

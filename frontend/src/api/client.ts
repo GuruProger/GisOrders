@@ -12,6 +12,9 @@ const AUTH_PATHS = new Set([
   '/users/login/json',
   '/users/register',
   '/users/refresh',
+  // Ruling P38: a 401 from the password change means the current password is
+  // wrong, not that the session expired.
+  '/users/me/password',
 ])
 
 function normalizePath(path: string): string {
