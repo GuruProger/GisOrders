@@ -8,6 +8,17 @@ import type { Message } from '@/api/types'
 const pendingByChat = new Map<number, Message>()
 const listeners = new Set<() => void>()
 
+/**
+ * `${chatId}:${messageId}` of every message whose flush request is in flight.
+ * Module-global so an unmount/remount cannot start a second POST for the same
+ * queued message.
+ */
+const flushing = new Set<string>()
+
+function flushKey(chatId: number, messageId: number): string {
+  return `${chatId}:${messageId}`
+}
+
 function emit(): void {
   for (const listener of listeners) listener()
 }
@@ -30,16 +41,41 @@ export function clearPendingMessage(chatId: number, messageId: number): void {
   emit()
 }
 
+/**
+ * Reserves the single in-flight POST for a queued message. Returns `false`
+ * when another component instance is already flushing the same message.
+ */
+export function tryBeginFlush(chatId: number, messageId: number): boolean {
+  const key = flushKey(chatId, messageId)
+  if (flushing.has(key)) return false
+  flushing.add(key)
+  return true
+}
+
+/** Releases the in-flight reservation after the POST settles. */
+export function endFlush(chatId: number, messageId: number): void {
+  flushing.delete(flushKey(chatId, messageId))
+}
+
+/**
+ * Drops every queued message, e.g. when the session ends. Called from the
+ * session store so a new user never inherits another account's drafts.
+ */
+export function clearPendingMessages(): void {
+  if (pendingByChat.size === 0 && flushing.size === 0) return
+  pendingByChat.clear()
+  flushing.clear()
+  emit()
+}
+
+/** Test-only reset; production resets go through the session store. */
+export function resetPendingMessages(): void {
+  clearPendingMessages()
+}
+
 export function subscribePending(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
   }
-}
-
-/** Test-only reset; production queues live for the whole session. */
-export function resetPendingMessages(): void {
-  if (pendingByChat.size === 0) return
-  pendingByChat.clear()
-  emit()
 }

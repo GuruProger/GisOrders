@@ -20,9 +20,11 @@ import { useSession } from '@/features/auth/session'
 import { formatDayLabel, groupMessagesByDay } from '@/features/chat/group'
 import {
   clearPendingMessage,
+  endFlush,
   getPendingMessage,
   setPendingMessage,
   subscribePending,
+  tryBeginFlush,
 } from '@/features/chat/pending'
 import { createChatSocket, type ChatSocket } from '@/features/chat/socket'
 import { cn } from '@/shared/lib/cn'
@@ -78,7 +80,11 @@ export function ChatPage() {
     () => null,
   )
   const [sendError, setSendError] = useState<string | null>(null)
+  // `status` stays optimistically online to avoid a banner flash, while
+  // `connected` only becomes true on the socket's first `auth.ok`; the queue
+  // flush waits for that confirmed signal.
   const [status, setStatus] = useState<'online' | 'offline'>('online')
+  const [connected, setConnected] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [onlineSignal, setOnlineSignal] = useState(0)
@@ -88,7 +94,7 @@ export function ChatPage() {
   const nearBottom = useRef(true)
   const socketRef = useRef<ChatSocket | null>(null)
   const previousStatus = useRef<'online' | 'offline'>(status)
-  const flushingChats = useRef(new Set<number>())
+  const mountedRef = useRef(true)
   const currentChatId = useRef(id)
   currentChatId.current = id
 
@@ -158,6 +164,14 @@ export function ChatPage() {
     setTyping(false)
   }, [])
 
+  // Async continuations (POST/flush) must never touch state after unmount.
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   // `/chats/1` → `/chats/2` reuses this component, so every piece of transient
   // state has to be dropped when the conversation id changes.
   useEffect(() => {
@@ -165,6 +179,7 @@ export function ChatPage() {
     setExtraMessages([])
     setSendError(null)
     setConnectionError(null)
+    setConnected(false)
     setTyping(false)
     if (typingTimer.current !== null) {
       clearTimeout(typingTimer.current)
@@ -188,12 +203,24 @@ export function ChatPage() {
   useEffect(() => {
     if (!validId) return
 
+    // Every callback of this socket belongs to this mount: after cleanup it
+    // must not update state (React 19 ignores unmounted updates silently).
+    let active = true
+
     const socket = createChatSocket({
       chatId: id,
       getToken: getAccessToken,
-      onStatus: setStatus,
-      onError: setConnectionError,
+      onStatus: (next) => {
+        if (!active) return
+        setStatus(next)
+        setConnected(next === 'online')
+      },
+      onError: (message) => {
+        if (!active) return
+        setConnectionError(message)
+      },
       onEvent: (event) => {
+        if (!active) return
         if (event.type === 'message.created') {
           const incoming = event.message
           setExtraMessages((current) =>
@@ -230,6 +257,7 @@ export function ChatPage() {
 
     socketRef.current = socket
     return () => {
+      active = false
       socket.close()
       socketRef.current = null
     }
@@ -269,40 +297,45 @@ export function ChatPage() {
     return () => window.removeEventListener('online', handleOnline)
   }, [id, validId, queryClient])
 
-  // Flush the queued message of the current chat after the socket (or the
-  // browser) is back. The request uses the message's own chat id so a late
-  // navigation can never send it to another conversation.
+  // Flush the queued message of the current chat once the socket has confirmed
+  // the connection. Ownership lives in `pending.ts`, so a remount cannot start
+  // a second POST for the same message. The request uses the message's own chat
+  // id so a late navigation can never send it to another conversation.
   useEffect(() => {
-    if (status !== 'online' || pending === null) return
+    if (!connected || pending === null) return
     const queued = pending
     const chatId = queued.chat_id
-    if (flushingChats.current.has(chatId)) return
-    flushingChats.current.add(chatId)
+    if (!tryBeginFlush(chatId, queued.id)) return
 
     void (async () => {
       try {
         const saved = await sendMessage(chatId, queued.text)
+        // The message really left: drop the queue entry even when this
+        // instance is gone, otherwise a remount would POST it again.
         clearPendingMessage(chatId, queued.id)
+        void queryClient.invalidateQueries({ queryKey: qk.chats.detail(chatId) })
         void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
         void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
-        if (currentChatId.current !== chatId) return
+        if (!mountedRef.current || currentChatId.current !== chatId) return
         setExtraMessages((current) => [
           ...current.filter((message) => message.id !== queued.id),
           saved,
         ])
       } catch {
+        // A failure after unmount must leave the message queued: the instance
+        // that owned the POST can no longer show an error or a rollback.
+        if (!mountedRef.current || currentChatId.current !== chatId) return
         // While the chat is open a failed flush must never wedge the
         // composer: roll it back and let the user send again. While another
         // chat is open the message stays queued for its own conversation.
-        if (currentChatId.current !== chatId) return
         clearPendingMessage(chatId, queued.id)
         setExtraMessages((current) => current.filter((message) => message.id !== queued.id))
         setSendError('Не удалось отправить')
       } finally {
-        flushingChats.current.delete(chatId)
+        endFlush(chatId, queued.id)
       }
     })()
-  }, [status, pending, onlineSignal, queryClient])
+  }, [connected, pending, onlineSignal, queryClient])
 
   // Keep the view pinned to the newest message only for readers already there.
   useEffect(() => {
@@ -350,15 +383,18 @@ export function ChatPage() {
 
     try {
       const saved = await sendMessage(chatId, text)
+      // A late success must refresh the conversation even when its component
+      // is already gone, so returning to it shows the sent message.
+      void queryClient.invalidateQueries({ queryKey: qk.chats.detail(chatId) })
       void queryClient.invalidateQueries({ queryKey: qk.chats.list() })
       void queryClient.invalidateQueries({ queryKey: qk.chats.unread() })
-      if (currentChatId.current !== chatId) return
+      if (!mountedRef.current || currentChatId.current !== chatId) return
       setExtraMessages((current) => [
         ...current.filter((message) => message.id !== temporary.id),
         saved,
       ])
     } catch (error) {
-      if (currentChatId.current !== chatId) {
+      if (!mountedRef.current || currentChatId.current !== chatId) {
         // The user already left: keep a failed message queued for its own
         // chat, never for the one that happens to be rendered now.
         if (isConnectionFailure(error)) setPendingMessage(chatId, temporary)

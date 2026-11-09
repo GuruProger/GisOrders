@@ -124,3 +124,26 @@ test('becomes anonymous without a network call when no refresh token is stored',
   expect(useSession.getState().status).toBe('anonymous')
   expect(useSession.getState().user).toBeNull()
 })
+
+test('clears the queued chat messages when the session is cleared or expired', async () => {
+  const { useSession } = await import('./session')
+  const pending = await import('@/features/chat/pending')
+  const { expireSession } = await import('@/api/refresh')
+
+  const queued = {
+    id: -1,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Черновик',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  }
+
+  pending.setPendingMessage(1, queued)
+  useSession.getState().clear()
+  expect(pending.getPendingMessage(1)).toBeNull()
+
+  pending.setPendingMessage(1, queued)
+  expireSession()
+  expect(pending.getPendingMessage(1)).toBeNull()
+})

@@ -2,11 +2,15 @@ import { QueryClient } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { Route, Routes, useNavigate } from 'react-router'
+import { Link, Route, Routes, useNavigate } from 'react-router'
 import { qk } from '@/api/queryKeys'
 import type { Chat, Message, User } from '@/api/types'
 import { useSession } from '@/features/auth/session'
-import { resetPendingMessages } from '@/features/chat/pending'
+import {
+  getPendingMessage,
+  resetPendingMessages,
+  setPendingMessage,
+} from '@/features/chat/pending'
 import { FakeWebSocket, installFakeWebSocket, uninstallFakeWebSocket } from '@/test/fakeSocket'
 import { server } from '@/test/msw'
 import { TestProviders } from '@/test/providers'
@@ -91,6 +95,18 @@ function renderPage() {
         <Route path="/chats/:id" element={<ChatPage />} />
         <Route path="/chats" element={<p>Чаты</p>} />
         <Route path="/orders/:id" element={<p>Заказ</p>} />
+      </Routes>
+    </TestProviders>,
+  )
+}
+
+/** Renders the chat plus a list route so leaving it unmounts `ChatPage`. */
+function renderUnmountable() {
+  return render(
+    <TestProviders initialEntries={['/chats/1']}>
+      <Routes>
+        <Route path="/chats/:id" element={<ChatPage />} />
+        <Route path="/chats" element={<Link to="/chats/1">Открыть чат</Link>} />
       </Routes>
     </TestProviders>,
   )
@@ -867,4 +883,217 @@ test('keeps the conversation and shows an inline notice when a refetch fails', a
   expect(await screen.findByText(/Не удалось обновить чат/)).toBeInTheDocument()
   expect(screen.getByText('Добрый день')).toBeInTheDocument()
   expect(screen.queryByText('Не удалось загрузить чат')).not.toBeInTheDocument()
+})
+
+test('flushes a queued message once when the chat is unmounted and remounted mid-flight', async () => {
+  const saved: Message = {
+    id: 700,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Один раз после возврата',
+    is_read: false,
+    created_at: localIso(0, 12),
+  }
+  let posts = 0
+  const responses: Array<(response: Response) => void> = []
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      posts += 1
+      return new Promise<Response>((resolve) => {
+        responses.push(resolve)
+      })
+    }),
+  )
+  let includeSaved = false
+  server.use(
+    http.get('/api/v1/chats/1', () =>
+      HttpResponse.json(
+        includeSaved ? { ...chat, messages: [...chat.messages, saved] } : chat,
+      ),
+    ),
+  )
+
+  renderUnmountable()
+  await screen.findByText('Иван')
+  const first = openSocket()
+  act(() => {
+    first.serverClose(1006)
+  })
+  expect(await screen.findByText('Нет связи, переподключаемся')).toBeInTheDocument()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Один раз после возврата')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  expect(posts).toBe(0)
+
+  act(() => {
+    window.dispatchEvent(new Event('online'))
+  })
+  const second = FakeWebSocket.last()
+  act(() => {
+    second.open()
+    second.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+  await waitFor(() => expect(posts).toBe(1))
+
+  // Leave the chat while the queued message is still posting.
+  await userEvent.click(screen.getByRole('link', { name: /К чатам/ }))
+  expect(await screen.findByRole('link', { name: 'Открыть чат' })).toBeInTheDocument()
+
+  // Coming back must show the queue entry but not start a second POST.
+  await userEvent.click(screen.getByRole('link', { name: 'Открыть чат' }))
+  expect(await screen.findByText('Один раз после возврата')).toBeInTheDocument()
+  const reopened = FakeWebSocket.last()
+  act(() => {
+    reopened.open()
+    reopened.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  expect(posts).toBe(1)
+
+  // The original POST resolves after unmount: one bubble, no duplicate.
+  includeSaved = true
+  await act(async () => {
+    responses[0]?.(HttpResponse.json(saved))
+  })
+
+  await waitFor(() =>
+    expect(bubble('Один раз после возврата')).toHaveAttribute('data-pending', 'false'),
+  )
+  expect(screen.getAllByText('Один раз после возврата')).toHaveLength(1)
+})
+
+test('keeps a queued message when a flush fails after unmount and retries on remount', async () => {
+  const queued: Message = {
+    id: -900,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Ждёт повтора',
+    is_read: false,
+    created_at: localIso(0, 12),
+  }
+  const saved: Message = { ...queued, id: 710 }
+  setPendingMessage(1, queued)
+
+  let posts = 0
+  const responses: Array<(response: Response) => void> = []
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      posts += 1
+      return new Promise<Response>((resolve) => {
+        responses.push(resolve)
+      })
+    }),
+  )
+
+  renderUnmountable()
+  await screen.findByText('Иван')
+  expect(posts).toBe(0)
+
+  openSocket()
+  await waitFor(() => expect(posts).toBe(1))
+
+  await userEvent.click(screen.getByRole('link', { name: /К чатам/ }))
+  expect(await screen.findByRole('link', { name: 'Открыть чат' })).toBeInTheDocument()
+
+  // The unmounted instance's POST fails: the entry stays queued, with no UI.
+  await act(async () => {
+    responses[0]?.(HttpResponse.error())
+  })
+  expect(getPendingMessage(1)).not.toBeNull()
+
+  await userEvent.click(screen.getByRole('link', { name: 'Открыть чат' }))
+  expect(await screen.findByText('Ждёт повтора')).toBeInTheDocument()
+  expect(screen.queryByText('Не удалось отправить')).not.toBeInTheDocument()
+
+  // Reconnecting the reopened chat retries the retained message.
+  const reopened = FakeWebSocket.last()
+  act(() => {
+    reopened.open()
+    reopened.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+  await waitFor(() => expect(posts).toBe(2))
+
+  await act(async () => {
+    responses[1]?.(HttpResponse.json(saved))
+  })
+  await waitFor(() => expect(getPendingMessage(1)).toBeNull())
+  expect(screen.getAllByText('Ждёт повтора')).toHaveLength(1)
+})
+
+test('does not flush a queued message before the socket confirms auth', async () => {
+  const queued: Message = {
+    id: -901,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'До авторизации',
+    is_read: false,
+    created_at: localIso(0, 12),
+  }
+  setPendingMessage(1, queued)
+
+  const saved: Message = { ...queued, id: 711 }
+  const send = vi.fn(() => HttpResponse.json(saved))
+  server.use(http.post('/api/v1/chats/1/messages', send))
+
+  renderPage()
+  expect(await screen.findByText('До авторизации')).toBeInTheDocument()
+
+  const socket = FakeWebSocket.last()
+  act(() => {
+    socket.open()
+  })
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30))
+  })
+  expect(send).not.toHaveBeenCalled()
+
+  act(() => {
+    socket.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+})
+
+test('invalidates the chat detail when a late flush succeeds after unmount', async () => {
+  const queued: Message = {
+    id: -902,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Поздний успех',
+    is_read: false,
+    created_at: localIso(0, 12),
+  }
+  setPendingMessage(1, queued)
+  const saved: Message = { ...queued, id: 720 }
+
+  const responses: Array<(response: Response) => void> = []
+  server.use(
+    http.post(
+      '/api/v1/chats/1/messages',
+      () =>
+        new Promise<Response>((resolve) => {
+          responses.push(resolve)
+        }),
+    ),
+  )
+
+  const invalidate = spyInvalidate()
+  const { unmount } = renderPage()
+  await screen.findByText('Иван')
+  openSocket()
+  await waitFor(() => expect(responses).toHaveLength(1))
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.chats.detail(1) }),
+  )
+  invalidate.mockClear()
+
+  unmount()
+
+  await act(async () => {
+    responses[0]?.(HttpResponse.json(saved))
+  })
+
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.chats.detail(1) }),
+  )
+  expect(getPendingMessage(1)).toBeNull()
 })
