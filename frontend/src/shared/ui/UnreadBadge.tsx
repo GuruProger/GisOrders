@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/cn'
+import { plural } from '@/shared/lib/plural'
 
 export interface UnreadBadgeProps {
   count: number
@@ -14,7 +15,7 @@ export function UnreadBadge({ count, className }: UnreadBadgeProps) {
 
   return (
     <span
-      aria-label={`${count} непрочитанных`}
+      aria-label={`${count} ${plural(count, ['непрочитанное', 'непрочитанных', 'непрочитанных'])}`}
       className={cn(
         'inline-flex min-w-5 items-center justify-center rounded-full bg-terracotta-600 px-1.5 text-[11px] font-semibold leading-5 text-white',
         className,
