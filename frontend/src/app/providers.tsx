@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import { bootstrap } from '@/features/auth/session'
+import { attachSessionCacheReset } from '@/features/auth/session-cache'
 
 interface ToastEntry {
   id: number
@@ -76,8 +77,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient)
 
   useEffect(() => {
+    const detachSessionCacheReset = attachSessionCacheReset(queryClient)
     void bootstrap()
-  }, [])
+    return detachSessionCacheReset
+  }, [queryClient])
 
   return (
     <QueryClientProvider client={queryClient}>

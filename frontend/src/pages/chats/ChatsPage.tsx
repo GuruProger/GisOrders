@@ -18,7 +18,8 @@ import { UnreadBadge } from '@/shared/ui/UnreadBadge'
 const NAME_STALE_MS = 5 * 60_000
 
 /** The other participant of a chat; `null` when the current user is unknown. */
-export function opponentId(chat: Chat, meId: number | null): number {
+export function opponentId(chat: Chat, meId: number | null): number | null {
+  if (meId === null) return null
   return chat.customer_id === meId ? chat.executor_id : chat.customer_id
 }
 
@@ -45,7 +46,9 @@ export function ChatsPage() {
   )
 
   const opponentIds = useMemo(() => {
-    const ids = chats.map((chat) => opponentId(chat, meId))
+    const ids = chats
+      .map((chat) => opponentId(chat, meId))
+      .filter((id): id is number => id !== null)
     return [...new Set(ids)]
   }, [chats, meId])
 
@@ -93,7 +96,10 @@ export function ChatsPage() {
         <ul className="flex flex-col gap-2">
           {chats.map((chat) => {
             const otherId = opponentId(chat, meId)
-            const name = names.get(otherId) ?? `Пользователь #${otherId}`
+            const name =
+              otherId === null
+                ? 'Собеседник'
+                : (names.get(otherId) ?? `Пользователь #${otherId}`)
 
             return (
               <li key={chat.id}>

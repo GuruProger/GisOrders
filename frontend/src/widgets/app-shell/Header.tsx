@@ -1,11 +1,13 @@
 import { Link } from 'react-router'
 import { useSession } from '@/features/auth/session'
+import { useRoleMode } from '@/features/switch-role/model'
 import { RoleSwitch } from '@/features/switch-role/RoleSwitch'
 import { Avatar } from '@/shared/ui/Avatar'
 
-/** Sticky app header: brand, role switch and the current user's avatar. */
+/** Sticky app header: brand, create-order action, role switch and the avatar. */
 export function Header() {
   const user = useSession((state) => state.user)
+  const [mode] = useRoleMode()
 
   return (
     <header
@@ -27,7 +29,17 @@ export function Header() {
           <span className="hidden text-lg sm:inline">GisOrders</span>
         </Link>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {mode === 'customer' && (
+            <Link
+              to="/orders/new"
+              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-[10px] bg-moss-600 px-3 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+            >
+              <span aria-hidden="true" className="text-base leading-none">+</span>
+              Создать заказ
+            </Link>
+          )}
+
           <RoleSwitch />
         </div>
 

@@ -103,10 +103,11 @@ test('customer orders are grouped by status with proposal counters', async () =>
   expect(screen.getByRole('link', { name: 'Открытый заказ' })).toHaveAttribute('href', '/orders/1')
 })
 
-test('customer without orders sees a hint and a way back to the feed', async () => {
+test('customer without orders is prompted to create one first', async () => {
   renderPage()
 
   expect(await screen.findByText('Пока нет заказов')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Создать заказ' })).toHaveAttribute('href', '/orders/new')
   expect(screen.getByRole('link', { name: 'К ленте' })).toHaveAttribute('href', '/')
 })
 

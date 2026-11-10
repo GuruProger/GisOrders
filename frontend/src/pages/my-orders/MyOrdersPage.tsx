@@ -118,9 +118,22 @@ function FeedLink() {
   return (
     <Link
       to="/"
-      className="inline-flex min-h-11 items-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+      className="inline-flex min-h-11 items-center justify-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
     >
       К ленте
+    </Link>
+  )
+}
+
+/** Primary call to action for a customer with no orders yet. */
+function CreateOrderLink() {
+  return (
+    <Link
+      to="/orders/new"
+      className="inline-flex min-h-11 items-center justify-center gap-1 rounded-[10px] bg-moss-600 px-4 text-base font-medium text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+    >
+      <span aria-hidden="true" className="text-lg leading-none">+</span>
+      Создать заказ
     </Link>
   )
 }
@@ -174,7 +187,12 @@ export function MyOrdersPage() {
         <EmptyState
           title="Пока нет заказов"
           description="Создайте первый заказ — исполнители рядом увидят его в ленте."
-          action={<FeedLink />}
+          action={
+            <div className="flex flex-col items-center gap-1">
+              <CreateOrderLink />
+              <FeedLink />
+            </div>
+          }
         />
       )}
 

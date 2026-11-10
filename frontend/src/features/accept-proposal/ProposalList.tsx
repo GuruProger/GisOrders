@@ -57,8 +57,8 @@ export function ProposalList({ order, proposals, onAccepted }: ProposalListProps
         queryClient.invalidateQueries({ queryKey: qk.proposals.forOrder(order.id) }),
       ])
       onAccepted()
-      // The chat detail screen arrives with the chats task; the list is the
-      // safe destination until then.
+      // The chat list is the immediate destination; the chat itself is opened
+      // from the row the accept action just created.
       navigate('/chats')
     },
     onError: () => {

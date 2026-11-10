@@ -119,6 +119,23 @@ test('shows the opponent name, initials and the last message time', async () => 
   expect(screen.getAllByText(formatShortDate(older.updated_at)).length).toBeGreaterThanOrEqual(1)
 })
 
+test('does not fetch names or guess the opponent when the own profile is unknown', async () => {
+  useSession.setState({ user: null, status: 'authenticated' })
+  let userRequests = 0
+  server.use(
+    http.get('/api/v1/users/:id', ({ params }) => {
+      userRequests += 1
+      return HttpResponse.json({ id: Number(params.id), username: 'Чужое имя' })
+    }),
+  )
+
+  renderPage()
+
+  expect(await screen.findAllByText('Собеседник')).toHaveLength(3)
+  expect(userRequests).toBe(0)
+  expect(screen.queryByText('Пользователь #2')).not.toBeInTheDocument()
+})
+
 test('falls back to a user id when the public profile is unavailable', async () => {
   server.use(http.get('/api/v1/users/:id', () => HttpResponse.json({}, { status: 500 })))
 
