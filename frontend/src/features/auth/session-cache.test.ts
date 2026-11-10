@@ -63,6 +63,36 @@ test('does not clear data when an unauthenticated bootstrap settles anonymously'
   unsubscribe()
 })
 
+test('clears cached data when a signed-in visitor logs in as another account', () => {
+  const queryClient = createQueryClient()
+  const unsubscribe = attachSessionCacheReset(queryClient)
+
+  useSession.setState({ user, status: 'authenticated' })
+  queryClient.setQueryData(qk.orders.my(), [order])
+
+  useSession.setState({
+    user: { ...user, id: 2, email: 'other@example.com', username: 'other' },
+    status: 'authenticated',
+  })
+
+  expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+
+  unsubscribe()
+})
+
+test('keeps cached data when the same profile is refreshed', () => {
+  const queryClient = createQueryClient()
+  const unsubscribe = attachSessionCacheReset(queryClient)
+
+  useSession.setState({ user, status: 'authenticated' })
+  queryClient.setQueryData(qk.orders.my(), [order])
+  useSession.getState().setUser({ ...user, username: 'renamed' })
+
+  expect(queryClient.getQueryData(qk.orders.my())).toEqual([order])
+
+  unsubscribe()
+})
+
 test('stops clearing after unsubscribe', () => {
   const queryClient = createQueryClient()
   const unsubscribe = attachSessionCacheReset(queryClient)

@@ -11,8 +11,14 @@ import { useSession } from './session'
  */
 export function attachSessionCacheReset(queryClient: QueryClient): () => void {
   return useSession.subscribe((state, previousState) => {
-    if (previousState.status === 'authenticated' && state.status === 'anonymous') {
-      queryClient.clear()
-    }
+    const signedOut = previousState.status === 'authenticated' && state.status === 'anonymous'
+    // `/login` is public, so a signed-in visitor can replace the account without
+    // passing through the anonymous state; user-scoped keys must not survive.
+    const switchedUser =
+      previousState.user !== null &&
+      state.user !== null &&
+      previousState.user.id !== state.user.id
+
+    if (signedOut || switchedUser) queryClient.clear()
   })
 }
