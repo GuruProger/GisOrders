@@ -168,6 +168,9 @@ export function ProfilePage() {
     setLoggingOut(true)
     try {
       await logout()
+    } catch {
+      // `logout` already cleared the local session; a server failure must not
+      // surface as an unhandled rejection from the fire-and-forget click.
     } finally {
       setLoggingOut(false)
       navigate('/login')

@@ -21,6 +21,7 @@ import { formatDayLabel, groupMessagesByDay } from '@/features/chat/group'
 import {
   clearPendingMessage,
   endFlush,
+  getFlushRevision,
   getPendingMessage,
   setPendingMessage,
   subscribePending,
@@ -78,6 +79,13 @@ export function ChatPage() {
     subscribePending,
     () => getPendingMessage(id),
     () => null,
+  )
+  // Flush ownership is invisible to React; the revision makes a release
+  // observable so a remounted instance can retry a retained message.
+  const flushRevision = useSyncExternalStore(
+    subscribePending,
+    getFlushRevision,
+    () => 0,
   )
   const [sendError, setSendError] = useState<string | null>(null)
   // `status` stays optimistically online to avoid a banner flash, while
@@ -299,8 +307,12 @@ export function ChatPage() {
 
   // Flush the queued message of the current chat once the socket has confirmed
   // the connection. Ownership lives in `pending.ts`, so a remount cannot start
-  // a second POST for the same message. The request uses the message's own chat
-  // id so a late navigation can never send it to another conversation.
+  // a second POST for the same message. `flushRevision` re-runs this effect
+  // when the owning instance releases the reservation without the queue
+  // changing (e.g. its POST failed after it unmounted), so the mounted
+  // instance retries instead of leaving the bubble stuck on «Отправляется…».
+  // The request uses the message's own chat id so a late navigation can never
+  // send it to another conversation.
   useEffect(() => {
     if (!connected || pending === null) return
     const queued = pending
@@ -335,7 +347,7 @@ export function ChatPage() {
         endFlush(chatId, queued.id)
       }
     })()
-  }, [connected, pending, onlineSignal, queryClient])
+  }, [connected, pending, flushRevision, onlineSignal, queryClient])
 
   // Keep the view pinned to the newest message only for readers already there.
   useEffect(() => {
@@ -395,9 +407,10 @@ export function ChatPage() {
       ])
     } catch (error) {
       if (!mountedRef.current || currentChatId.current !== chatId) {
-        // The user already left: keep a failed message queued for its own
-        // chat, never for the one that happens to be rendered now.
-        if (isConnectionFailure(error)) setPendingMessage(chatId, temporary)
+        // The user already left: keep the message queued for its own chat
+        // instead of dropping it silently. Reopening that chat retries the
+        // POST and, if it fails again, shows the error there.
+        setPendingMessage(chatId, temporary)
         return
       }
       setExtraMessages((current) => current.filter((message) => message.id !== temporary.id))

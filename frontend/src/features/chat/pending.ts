@@ -15,6 +15,14 @@ const listeners = new Set<() => void>()
  */
 const flushing = new Set<string>()
 
+/**
+ * Bumped whenever a flush reservation is taken or released. The reserved set
+ * itself is invisible to React, so a mounted instance that failed to take the
+ * reservation needs an observable signal to retry a message whose POST
+ * settled while its owner was unmounted.
+ */
+let flushRevision = 0
+
 function flushKey(chatId: number, messageId: number): string {
   return `${chatId}:${messageId}`
 }
@@ -49,12 +57,21 @@ export function tryBeginFlush(chatId: number, messageId: number): boolean {
   const key = flushKey(chatId, messageId)
   if (flushing.has(key)) return false
   flushing.add(key)
+  flushRevision += 1
+  emit()
   return true
 }
 
 /** Releases the in-flight reservation after the POST settles. */
 export function endFlush(chatId: number, messageId: number): void {
-  flushing.delete(flushKey(chatId, messageId))
+  if (!flushing.delete(flushKey(chatId, messageId))) return
+  flushRevision += 1
+  emit()
+}
+
+/** Current flush revision; a change means a reservation was taken or released. */
+export function getFlushRevision(): number {
+  return flushRevision
 }
 
 /**

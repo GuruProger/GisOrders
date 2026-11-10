@@ -1020,6 +1020,103 @@ test('keeps a queued message when a flush fails after unmount and retries on rem
   expect(screen.getAllByText('Ждёт повтора')).toHaveLength(1)
 })
 
+test('retries a queued message when its in-flight flush fails after a remount', async () => {
+  const queued: Message = {
+    id: -910,
+    chat_id: 1,
+    sender_id: user.id,
+    text: 'Повтор после возврата',
+    is_read: false,
+    created_at: localIso(0, 12),
+  }
+  const saved: Message = { ...queued, id: 730 }
+  setPendingMessage(1, queued)
+
+  let posts = 0
+  const responses: Array<(response: Response) => void> = []
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      posts += 1
+      return new Promise<Response>((resolve) => {
+        responses.push(resolve)
+      })
+    }),
+  )
+
+  renderUnmountable()
+  await screen.findByText('Иван')
+  openSocket()
+  await waitFor(() => expect(posts).toBe(1))
+
+  // Leave while the flush is in flight and come back before it settles: the
+  // new instance cannot own the POST, so it must wait for the release.
+  await userEvent.click(screen.getByRole('link', { name: /К чатам/ }))
+  expect(await screen.findByRole('link', { name: 'Открыть чат' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('link', { name: 'Открыть чат' }))
+  expect(await screen.findByText('Повтор после возврата')).toBeInTheDocument()
+  expect(bubble('Повтор после возврата')).toHaveAttribute('data-pending', 'true')
+
+  const reopened = FakeWebSocket.last()
+  act(() => {
+    reopened.open()
+    reopened.receive({ type: 'auth.ok', chat_id: 1, user_id: user.id })
+  })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  expect(posts).toBe(1)
+
+  // The original POST rejects while its owner is unmounted: the retained entry
+  // must be picked up by the mounted instance instead of stalling.
+  await act(async () => {
+    responses[0]?.(HttpResponse.error())
+  })
+  await waitFor(() => expect(posts).toBe(2))
+
+  await act(async () => {
+    responses[1]?.(HttpResponse.json(saved))
+  })
+  await waitFor(() => expect(getPendingMessage(1)).toBeNull())
+  await waitFor(() =>
+    expect(bubble('Повтор после возврата')).toHaveAttribute('data-pending', 'false'),
+  )
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Ещё')
+  expect(screen.getByRole('button', { name: 'Отправить' })).toBeEnabled()
+})
+
+test('keeps an online message that failed after the user left', async () => {
+  let posts = 0
+  const responses: Array<(response: Response) => void> = []
+  server.use(
+    http.post('/api/v1/chats/1/messages', () => {
+      posts += 1
+      return new Promise<Response>((resolve) => {
+        responses.push(resolve)
+      })
+    }),
+  )
+
+  renderUnmountable()
+  await screen.findByText('Иван')
+  openSocket()
+
+  await userEvent.type(screen.getByLabelText('Сообщение'), 'Потерянное сообщение')
+  await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+  await waitFor(() => expect(posts).toBe(1))
+
+  // Leave while the ordinary POST is still in flight.
+  await userEvent.click(screen.getByRole('link', { name: /К чатам/ }))
+  expect(await screen.findByRole('link', { name: 'Открыть чат' })).toBeInTheDocument()
+
+  // A permanent API failure lands after unmount: it must not vanish silently.
+  await act(async () => {
+    responses[0]?.(HttpResponse.json({ detail: 'Ошибка' }, { status: 500 }))
+  })
+  expect(getPendingMessage(1)).not.toBeNull()
+
+  await userEvent.click(screen.getByRole('link', { name: 'Открыть чат' }))
+  expect(await screen.findByText('Потерянное сообщение')).toBeInTheDocument()
+  expect(bubble('Потерянное сообщение')).toHaveAttribute('data-pending', 'true')
+})
+
 test('does not flush a queued message before the socket confirms auth', async () => {
   const queued: Message = {
     id: -901,

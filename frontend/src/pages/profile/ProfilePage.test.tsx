@@ -257,6 +257,36 @@ test('a wrong current password stays inline and keeps the session', async () => 
   expect(screen.queryByText('Страница входа')).not.toBeInTheDocument()
 })
 
+test('shows a Russian fallback when the password change fails without an api error', async () => {
+  server.use(http.post('/api/v1/users/me/password', () => HttpResponse.error()))
+
+  renderProfile()
+
+  await userEvent.type(screen.getByLabelText('Текущий пароль'), 'OldPass1')
+  await userEvent.type(screen.getByLabelText('Новый пароль'), 'NewPass123')
+  await userEvent.click(screen.getByRole('button', { name: 'Изменить пароль' }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Не удалось изменить пароль')
+  expect(alert).not.toHaveTextContent('Failed to fetch')
+})
+
+test('shows the api detail when the password change is rejected', async () => {
+  server.use(
+    http.post('/api/v1/users/me/password', () =>
+      HttpResponse.json({ detail: 'Сервер недоступен' }, { status: 500 }),
+    ),
+  )
+
+  renderProfile()
+
+  await userEvent.type(screen.getByLabelText('Текущий пароль'), 'OldPass1')
+  await userEvent.type(screen.getByLabelText('Новый пароль'), 'NewPass123')
+  await userEvent.click(screen.getByRole('button', { name: 'Изменить пароль' }))
+
+  expect(await screen.findByText('Сервер недоступен')).toBeInTheDocument()
+})
+
 test('a successful password change clears the session and redirects', async () => {
   server.use(
     http.post('/api/v1/users/me/password', () => new HttpResponse(null, { status: 204 })),
@@ -329,6 +359,23 @@ test('logout calls the API with the refresh token and redirects', async () => {
 
   expect(await screen.findByText('Страница входа')).toBeInTheDocument()
   expect(payload).toEqual({ refresh_token: 'refresh-1' })
+  expect(useSession.getState().user).toBeNull()
+  expect(localStorage.getItem('gisorders.refresh')).toBeNull()
+})
+
+test('a failing logout still redirects without an unhandled rejection', async () => {
+  localStorage.setItem('gisorders.refresh', 'refresh-1')
+  server.use(
+    http.post('/api/v1/users/logout', () =>
+      HttpResponse.json({ detail: 'Ошибка сервера' }, { status: 500 }),
+    ),
+  )
+
+  renderProfile()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
+
+  expect(await screen.findByText('Страница входа')).toBeInTheDocument()
   expect(useSession.getState().user).toBeNull()
   expect(localStorage.getItem('gisorders.refresh')).toBeNull()
 })

@@ -44,7 +44,10 @@ function passwordErrorMessage(error: unknown): string | null {
   if (error instanceof ApiError && error.code === 'invalid_password') {
     return 'Текущий пароль неверен'
   }
-  return error instanceof Error ? error.message : 'Не удалось изменить пароль'
+  // `parseError` already localizes HTTP failures; anything else (offline,
+  // timeout) would surface an English browser message.
+  if (error instanceof ApiError) return error.message
+  return 'Не удалось изменить пароль'
 }
 
 /** Current/new password form; a successful change signs the user out. */
