@@ -197,5 +197,11 @@ backend/media/
 
 # Frontend (vitest coverage; node_modules/dist already covered above)
 frontend/coverage/
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # `lib/` above targets Python packaging and must not hide frontend sources
 !frontend/src/**/lib/
