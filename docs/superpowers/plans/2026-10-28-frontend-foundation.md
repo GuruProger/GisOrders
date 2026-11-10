@@ -487,11 +487,14 @@ def normalize_tree_type(value: str) -> str:
 
 - [ ] **Step 5: Сравнивать нормализованные значения в фильтре**
 
-В `OrderService._available_conditions` (из задачи 2) заменить условие по породе на:
+В `OrderService._available_conditions` (из задачи 2) заменить условие по породе на добавление ещё одного условия в список:
 
 ```python
 		if filters.tree_type:
-			stmt_condition = func.lower(func.replace(func.trim(Order.tree_type), "ё", "е")) == normalize_tree_type(filters.tree_type)
+			conditions.append(
+				func.lower(func.replace(func.trim(Order.tree_type), "ё", "е"))
+				== normalize_tree_type(filters.tree_type)
+			)
 ```
 
 Так фильтр работает и для строк, записанных до нормализации.
@@ -862,7 +865,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 export function Button({ variant = 'primary', size = 'md', loading, disabled, className, children, ...rest }: ButtonProps)
 ```
 
-Классы по вариантам — из токенов (`bg-moss-600 text-white hover:bg-leaf-500`, `bg-sage-100 text-moss-600`, `border border-line text-moss-600`, `bg-[#fbeceb] text-terracotta-600` — последний заменить на токен `--color-terracotta-50` и добавить его в `styles.css`). Минимальная высота `min-h-11` (44 px), фокус-кольцо `focus-visible:ring-2 ring-leaf-500`.
+Классы по вариантам — из токенов (`bg-moss-600 text-white hover:bg-leaf-500`, `bg-sage-100 text-moss-600`, `border border-line text-moss-600`, `bg-terracotta-50 text-terracotta-600`). Токен `--color-terracotta-50: #fbeceb` добавить в `styles.css` вместе с остальными; hex в компонентах не пишем. Минимальная высота `min-h-11` (44 px), фокус-кольцо `focus-visible:ring-2 ring-leaf-500`.
 
 `Field.tsx`: рендерит `label` c `htmlFor`, children, при `error` — `<p role="alert" className="text-sm text-terracotta-600">`; клонирует единственного ребёнка, добавляя `aria-describedby` и `aria-invalid`.
 
@@ -1072,6 +1075,7 @@ git commit -m "feat(frontend): add api client with single-flight token refresh"
 - Create: `frontend/src/pages/login/LoginPage.tsx`, `frontend/src/pages/register/RegisterPage.tsx`
 - Create: `frontend/src/test/providers.tsx` — обёртка для тестов
 - Modify: `frontend/src/app/App.tsx` — подключить роутер и провайдеры
+- Modify: `frontend/src/test/smoke.test.tsx` — после подключения роутера заглушка `<h1>GisOrders</h1>` исчезает; тест должен рендерить `<App/>` и ждать заголовок страницы входа
 - Create: `frontend/src/app/providers.tsx`, `frontend/src/app/router.tsx`
 - Test: `frontend/src/features/auth/*.test.tsx`
 

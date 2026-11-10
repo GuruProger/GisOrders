@@ -1,0 +1,48 @@
+{
+  "name": "gisorders-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --exclude 'e2e/**'",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@react-leaflet/core": "^3.0.0",
+    "@tanstack/react-query": "^5",
+    "date-fns": "^4",
+    "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-hook-form": "^7",
+    "react-leaflet": "^5.0.0",
+    "react-router": "^7",
+    "zod": "^4",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14",
+    "@types/leaflet": "^1.9.22",
+    "@types/leaflet.markercluster": "^1.5.6",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "jsdom": "^26",
+    "msw": "^2",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^7",
+    "vite-plugin-pwa": "^1",
+    "vitest": "^3"
+  }
+}

@@ -74,6 +74,7 @@ app.add_middleware(
     allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count"],
 )
 
 # Добавляется последним, поэтому оборачивает и CORS-ответы (включая preflight).

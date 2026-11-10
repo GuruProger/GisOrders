@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from core.time import as_utc, utcnow
 
 from .models import OrderStatus, ProposalStatus
+from .normalization import normalize_tree_type
 
 
 # Базовые схемы для Order
@@ -20,6 +21,10 @@ class OrderBase(BaseModel):
 	tree_height: float = Field(..., gt=0)
 	tree_diameter: float = Field(..., gt=0)
 	photos: Optional[List[str]] = None
+	
+	@field_validator('tree_type')
+	def normalize_tree_type_value(cls, v: str) -> str:
+		return normalize_tree_type(v)
 	
 	@field_validator('max_price')
 	def validate_prices(cls, v, values):
@@ -79,6 +84,12 @@ class OrderUpdate(BaseModel):
 			if v < values.data['min_price']:
 				raise ValueError('max_price должен быть больше или равен min_price')
 		return v
+	
+	@field_validator('tree_type')
+	def normalize_tree_type_value(cls, v: Optional[str]) -> Optional[str]:
+		if v is None:
+			return None
+		return normalize_tree_type(v)
 
 
 class OrderResponse(BaseModel):
@@ -100,6 +111,7 @@ class OrderResponse(BaseModel):
 	accepted_proposal_id: Optional[int] = None
 	lat: float
 	lon: float
+	proposals_count: int = 0
 	
 	model_config = ConfigDict(from_attributes=True)
 
@@ -146,6 +158,7 @@ class OrderFilters(BaseModel):
 	min_price: Optional[float] = Field(None, ge=0)
 	max_price: Optional[float] = Field(None, ge=0)
 	tree_type: Optional[str] = None
+	search: Optional[str] = Field(None, max_length=200)
 	max_height: Optional[float] = Field(None, gt=0)
 	page: int = Field(1, ge=1)
 	per_page: int = Field(20, ge=1, le=100)

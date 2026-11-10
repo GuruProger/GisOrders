@@ -61,6 +61,27 @@ curl http://localhost:8000/health
 Миграции применяются автоматически при старте контейнера. В production
 включён JSON-формат логов (`LOG_JSON=true`), а `REDIS_URL` задаётся compose-файлом.
 
+В production compose фронтенд раздаётся nginx на `${FRONTEND_PORT:-8080}`
+(внутри контейнера порт 80): nginx отдаёт собранный SPA, проксирует `/api`
+(включая WebSocket) и `/media` на backend и добавляет CSP-заголовки.
+Порт бэкенда `${BACKEND_PORT:-8000}` при этом тоже опубликован напрямую —
+это удобно для health-check и отладки, но такой доступ обходит nginx и его
+CSP. Если прямой доступ снаружи не нужен, закройте порт файрволом или
+уберите его публикацию из compose-файла.
+
+### Нормализация пород деревьев
+
+Скрипт `backend/scripts/normalize_tree_types.py` приводит уже сохранённые
+заказы к единому виду (регистр, пробелы, «ё»). Запускайте его **один раз
+после применения миграций и до того**, как полагаться на фильтры по породе и
+datalist: старые записи иначе не совпадут с нормализованными значениями.
+
+```bash
+cd backend
+uv run alembic upgrade head
+uv run python scripts/normalize_tree_types.py
+```
+
 ## Локальный запуск
 
 ```bash
@@ -174,7 +195,9 @@ uv run pytest --cov=api --cov=core --cov-report=term-missing
 uv run ruff check .
 ```
 
-Порог покрытия — 75%; CI также проверяет миграции и линтер.
+Порог покрытия — 75%; CI также проверяет миграции и линтер. Отдельная job
+`frontend` запускает unit-тесты, `npm run typecheck` и `npm run build` из
+каталога `frontend/`.
 
 ## Обслуживание
 

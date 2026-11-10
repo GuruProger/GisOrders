@@ -194,3 +194,19 @@ pytest.ini
 
 # Загруженные пользователями изображения
 backend/media/
+
+# Frontend (vitest coverage; node_modules/dist already covered above)
+frontend/coverage/
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+.playwright-mcp/
+
+# Local-only helpers and artifacts that must never be committed
+/test.html
+backend/seed_db.py
+
+# `lib/` above targets Python packaging and must not hide frontend sources
+!frontend/src/**/lib/

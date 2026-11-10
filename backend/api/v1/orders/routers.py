@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import db_helper
@@ -61,6 +61,7 @@ async def get_my_orders(
 	description="Получение списка заказов, доступных для отправки предложений"
 )
 async def get_available_orders(
+		response: Response,
 		session: Annotated[AsyncSession, Depends(db_helper.session_getter)],
 		current_user: Annotated[User, Depends(get_current_active_user)],
 		radius_km: Optional[int] = Query(10, ge=1, le=50, description="Радиус поиска в км"),
@@ -69,6 +70,7 @@ async def get_available_orders(
 		min_price: Optional[float] = Query(None, ge=0, description="Минимальная цена"),
 		max_price: Optional[float] = Query(None, ge=0, description="Максимальная цена"),
 		tree_type: Optional[str] = Query(None, description="Тип дерева"),
+		search: Optional[str] = Query(None, max_length=200, description="Поиск по названию и описанию"),
 		max_height: Optional[float] = Query(None, gt=0, description="Максимальная высота дерева"),
 		page: int = Query(1, ge=1, description="Номер страницы"),
 		per_page: int = Query(20, ge=1, le=100, description="Количество элементов на странице"),
@@ -83,12 +85,15 @@ async def get_available_orders(
 		min_price=min_price,
 		max_price=max_price,
 		tree_type=tree_type,
+		search=search,
 		max_height=max_height,
 		page=page,
 		per_page=per_page,
 		sort_by=sort_by,
 		sort_order=sort_order
 	)
+	total = await OrderService.count_available_orders(session, current_user.id, filters)
+	response.headers["X-Total-Count"] = str(total)
 	return await OrderService.get_available_orders(session, current_user.id, filters)
 
 
