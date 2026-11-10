@@ -11,7 +11,7 @@ export const CUSTOMER_EMAIL = process.env.E2E_CUSTOMER_EMAIL ?? 'customer_test@e
 export const EXECUTOR_EMAIL = process.env.E2E_EXECUTOR_EMAIL ?? 'executor_test@example.com'
 export const PASSWORD = process.env.E2E_PASSWORD ?? 'Testpass123'
 
-/** Central Moscow, close enough to the seeded orders for the default 10 km radius. */
+/** Central Moscow; specs create their orders around it to fit the default 10 km radius. */
 export const MOSCOW_CENTER = { lat: 55.7558, lon: 37.6173 }
 
 export type RoleMode = 'customer' | 'executor'

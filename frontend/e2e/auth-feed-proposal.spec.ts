@@ -13,8 +13,8 @@ import {
  * Scenario 1: an executor signs in, finds an order in the feed and responds.
  *
  * The order is created through the API with a unique title so the feed search
- * always targets a fresh order: seeded orders may already have a proposal from
- * this executor, which would show «Ваш отклик» instead of the form.
+ * always targets a fresh order the executor has not responded to yet (an
+ * already-proposed order would show «Ваш отклик» instead of the form).
  */
 test('executor finds an order in the feed and sends a proposal', async ({
   page,

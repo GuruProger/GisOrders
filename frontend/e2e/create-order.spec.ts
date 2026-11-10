@@ -4,15 +4,16 @@ import { CUSTOMER_EMAIL, localDeadline, loginViaUi, uniqueTitle } from './helper
 /**
  * Scenario 2: a customer publishes an order through the creation form.
  *
- * The app has no visible «+» entry point yet, so the form is opened by its
- * route (`/orders/new`), which is the same screen the future button will link
- * to. The order is deleted at the end so repeated runs do not grow the feed.
+ * The form is opened from the header's «Создать заказ» action, the same entry
+ * point a customer uses. The order is deleted at the end so repeated runs do
+ * not grow the feed.
  */
 test('customer creates an order through the form', async ({ page }, testInfo) => {
   const title = uniqueTitle('заказ', testInfo)
 
   await loginViaUi(page, CUSTOMER_EMAIL, 'customer')
-  await page.goto('/orders/new')
+  await page.getByRole('link', { name: 'Создать заказ' }).click()
+  await expect(page).toHaveURL(/\/orders\/new$/)
 
   await page.getByLabel('Название', { exact: true }).fill(title)
   await page
@@ -27,8 +28,12 @@ test('customer creates an order through the form', async ({ page }, testInfo) =>
   await page.getByLabel('Диаметр, см', { exact: true }).fill('35')
 
   // Clicking the Leaflet surface sets the order point; without it the form
-  // refuses to submit with «Поставьте точку на карте».
-  await page.locator('.leaflet-container').click({ position: { x: 160, y: 110 } })
+  // refuses to submit with «Поставьте точку на карте». Click the map's center
+  // so the test does not depend on a fixed pixel offset.
+  const map = page.locator('.leaflet-container')
+  const box = await map.boundingBox()
+  if (!box) throw new Error('Leaflet map has no bounding box')
+  await map.click({ position: { x: box.width / 2, y: box.height / 2 } })
   await expect(page.locator('.leaflet-marker-icon')).toBeVisible()
 
   await page.getByRole('button', { name: 'Опубликовать' }).click()
