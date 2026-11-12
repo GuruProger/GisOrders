@@ -506,7 +506,7 @@ export function ChatPage() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col gap-3 pb-6">
+    <section className="mx-auto flex min-h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:min-h-[calc(100dvh-11rem)]">
       <header className="flex flex-col gap-2 border-b border-line pb-3">
         <Link
           to="/chats"
@@ -559,10 +559,10 @@ export function ChatPage() {
           ref={listRef}
           onScroll={handleScroll}
           data-testid="chat-messages"
-          className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-3"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-3 [scrollbar-color:var(--color-line)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-line [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5"
         >
           {messages.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
+            <p className="m-auto py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
           ) : (
             groups.map((group, index) => (
               <div key={`${group.day}-${index}`} className="flex flex-col gap-2">
