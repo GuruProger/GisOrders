@@ -9,6 +9,7 @@ import { FiltersSheet } from '@/features/filters/FiltersSheet'
 import { DEFAULT_FILTERS, parseFilters, toSearchParams } from '@/features/filters/model'
 import { SearchBar } from '@/features/filters/SearchBar'
 import { requestGeolocation, useUserPoint } from '@/features/user-point/model'
+import { useRoleMode } from '@/features/switch-role/model'
 import { plural } from '@/shared/lib/plural'
 import { Button } from '@/shared/ui/Button'
 import { EmptyState } from '@/shared/ui/EmptyState'
@@ -51,6 +52,8 @@ export function FeedPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [point, setPoint] = useUserPoint()
+  const [mode] = useRoleMode()
+  const isCustomer = mode === 'customer'
   const [sheetOpen, setSheetOpen] = useState(false)
   const [locating, setLocating] = useState(false)
   const [highlightId, setHighlightId] = useState<number | null>(null)
@@ -216,7 +219,11 @@ export function FeedPage() {
           {point === null ? (
             <EmptyState
               title="Укажите, где искать"
-              description="Разрешите геолокацию или выберите точку на карте — покажем заказы рядом."
+              description={
+                isCustomer
+                  ? 'Разрешите геолокацию или выберите точку на карте — покажем заказы других заказчиков. Свои заказы вы найдёте в разделе «Мои заказы».'
+                  : 'Разрешите геолокацию или выберите точку на карте — покажем заказы рядом.'
+              }
               action={
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button loading={locating} onClick={() => void handleRequestLocation()}>
@@ -250,10 +257,19 @@ export function FeedPage() {
             ) : (
               <EmptyState
                 title={`В радиусе ${radiusKm} км заказов нет`}
-                description="Попробуйте увеличить радиус поиска или изменить фильтры."
+                description={
+                  isCustomer
+                    ? 'Лента показывает заказы других заказчиков. Ваши заказы — в разделе «Мои заказы».'
+                    : 'Попробуйте увеличить радиус поиска или изменить фильтры.'
+                }
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button onClick={widenRadius}>Увеличить радиус</Button>
+                    {isCustomer && (
+                      <Link to="/my/orders" className={secondaryLinkClasses}>
+                        Мои заказы
+                      </Link>
+                    )}
                     <Button variant="ghost" onClick={resetFilters}>
                       Сбросить фильтры
                     </Button>

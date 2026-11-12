@@ -5,17 +5,18 @@ import { useRoleMode, type RoleMode } from './model'
 interface RoleOption {
   value: RoleMode
   label: string
-  shortLabel: string
 }
 
 const options: RoleOption[] = [
-  { value: 'customer', label: 'Заказчик', shortLabel: 'З' },
-  { value: 'executor', label: 'Исполнитель', shortLabel: 'И' },
+  { value: 'customer', label: 'Заказчик' },
+  { value: 'executor', label: 'Исполнитель' },
 ]
 
 /**
- * Two-state control for the UI role. On very narrow screens the visible text
- * collapses to initials, while the accessible name always stays complete.
+ * Two-state control for the UI role. The complete labels stay visible on every
+ * width: on narrow screens the text only gets smaller and tighter, so neither
+ * label is ever clipped to an unreadable initial. The accessible name is the
+ * full label regardless of the viewport.
  */
 export function RoleSwitch() {
   const [mode, setMode] = useRoleMode()
@@ -63,13 +64,11 @@ export function RoleSwitch() {
             onKeyDown={(event) => handleKeyDown(event, option.value)}
             className={cn(
               'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500',
+              'max-[399px]:px-1.5 max-[399px]:text-xs',
               checked ? 'bg-card text-moss-600 shadow-sm' : 'text-muted-strong hover:text-moss-600',
             )}
           >
-            <span className="max-[399px]:hidden">{option.label}</span>
-            <span aria-hidden="true" className="hidden max-[399px]:inline">
-              {option.shortLabel}
-            </span>
+            <span className="leading-tight">{option.label}</span>
           </button>
         )
       })}

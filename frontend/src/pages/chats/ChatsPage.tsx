@@ -3,11 +3,12 @@ import { format, isSameDay } from 'date-fns'
 import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { fetchChats } from '@/api/chats'
+import { fetchOrder } from '@/api/orders'
 import { qk } from '@/api/queryKeys'
-import type { Chat } from '@/api/types'
+import type { Chat, Order } from '@/api/types'
 import { fetchUser } from '@/api/users'
 import { useSession } from '@/features/auth/session'
-import { formatShortDate } from '@/shared/lib/format'
+import { formatShortDate, shortAddress } from '@/shared/lib/format'
 import { useDocumentTitle } from '@/shared/lib/use-document-title'
 import { Avatar } from '@/shared/ui/Avatar'
 import { Button } from '@/shared/ui/Button'
@@ -29,7 +30,7 @@ function formatChatTime(iso: string): string {
   return isSameDay(date, new Date()) ? format(date, 'HH:mm') : formatShortDate(iso)
 }
 
-/** «Чаты»: active conversations with the opponent's name and last message. */
+/** «Чаты»: active conversations with the opponent's name, order context and last message. */
 export function ChatsPage() {
   useDocumentTitle('Чаты — GisOrders')
   const user = useSession((state) => state.user)
@@ -66,6 +67,27 @@ export function ChatsPage() {
     if (username) names.set(id, username)
   })
 
+  // The chat payload carries only `order_id`, so the order context (title and
+  // address) is fetched per unique order to label each conversation.
+  const orderIds = useMemo(
+    () => [...new Set(chats.map((chat) => chat.order_id))],
+    [chats],
+  )
+
+  const orderQueries = useQueries({
+    queries: orderIds.map((id) => ({
+      queryKey: qk.orders.detail(id),
+      queryFn: () => fetchOrder(id),
+      staleTime: NAME_STALE_MS,
+    })),
+  })
+
+  const orders = new Map<number, Order>()
+  orderIds.forEach((id, index) => {
+    const order = orderQueries[index]?.data
+    if (order) orders.set(id, order)
+  })
+
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 pb-6">
       <h1 className="text-2xl font-semibold text-forest-900">Чаты</h1>
@@ -100,6 +122,10 @@ export function ChatsPage() {
               otherId === null
                 ? 'Собеседник'
                 : (names.get(otherId) ?? `Пользователь #${otherId}`)
+            const order = orders.get(chat.order_id)
+            const orderLabel = order
+              ? `${order.title} · ${shortAddress(order.address)}`
+              : `Заказ #${chat.order_id}`
 
             return (
               <li key={chat.id}>
@@ -116,6 +142,8 @@ export function ChatsPage() {
                         {formatChatTime(chat.updated_at)}
                       </span>
                     </div>
+
+                    <p className="truncate text-xs text-muted">{orderLabel}</p>
 
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm text-muted-strong">

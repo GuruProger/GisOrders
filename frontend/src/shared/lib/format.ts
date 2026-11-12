@@ -32,3 +32,16 @@ export function formatDeadline(iso: string, now: Date = new Date()): string {
 
   return formatShortDate(iso)
 }
+
+/**
+ * Compact address for tight rows: only the first `parts` comma-separated
+ * segments (`Москва, Тверская улица, 1` → `Москва, Тверская улица`).
+ */
+export function shortAddress(address: string, parts = 2): string {
+  const segments = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+  const cut = segments.slice(0, parts).join(', ')
+  return cut === '' ? address : cut
+}

@@ -12,6 +12,7 @@ import {
 import { Link, useParams } from 'react-router'
 import { fetchChat, markChatRead, sendMessage } from '@/api/chats'
 import { ApiError } from '@/api/errors'
+import { fetchOrder } from '@/api/orders'
 import { qk } from '@/api/queryKeys'
 import { getAccessToken } from '@/api/token'
 import type { Message } from '@/api/types'
@@ -113,6 +114,7 @@ export function ChatPage() {
   })
 
   const chat = query.data
+  const orderId = chat === undefined ? null : chat.order_id
   const opponentId =
     chat === undefined ? null : chat.customer_id === myId ? chat.executor_id : chat.customer_id
 
@@ -120,6 +122,15 @@ export function ChatPage() {
     queryKey: qk.users.detail(opponentId ?? 0),
     queryFn: () => fetchUser(opponentId as number),
     enabled: opponentId !== null,
+    staleTime: NAME_STALE_MS,
+  })
+
+  // The chat payload carries only `order_id`; the order title labels the
+  // conversation and links to the order card.
+  const orderQuery = useQuery({
+    queryKey: qk.orders.detail(orderId ?? 0),
+    queryFn: () => fetchOrder(orderId as number),
+    enabled: orderId !== null,
     staleTime: NAME_STALE_MS,
   })
 
@@ -485,7 +496,7 @@ export function ChatPage() {
               to={`/orders/${chat.order_id}`}
               className="inline-flex min-h-11 items-center text-sm text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
             >
-              К заказу
+              {orderQuery.data ? orderQuery.data.title : 'К заказу'}
             </Link>
           </div>
         </div>

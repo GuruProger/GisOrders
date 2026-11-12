@@ -78,12 +78,26 @@ function serveUsers(): void {
   )
 }
 
+function serveOrders(): void {
+  server.use(
+    http.get('/api/v1/orders/:id', ({ params }) => {
+      const id = Number(params.id)
+      return HttpResponse.json({
+        id,
+        title: id === 10 ? 'Спилить берёзу' : 'Обрезать крону',
+        address: 'Москва, Тверская улица, 1',
+      })
+    }),
+  )
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 
 beforeEach(() => {
   useSession.setState({ user, status: 'authenticated' })
   serveChats([older, newer, emptyChat])
   serveUsers()
+  serveOrders()
 })
 
 afterEach(() => {
@@ -142,6 +156,23 @@ test('falls back to a user id when the public profile is unavailable', async () 
   renderPage()
 
   expect(await screen.findByText('Пользователь #4')).toBeInTheDocument()
+})
+
+test('shows the order title and short address for each chat', async () => {
+  renderPage()
+
+  // Orders 10 and 11: chat 3 shares order 10 with chat 1.
+  expect(await screen.findAllByText('Спилить берёзу · Москва, Тверская улица')).toHaveLength(2)
+  expect(screen.getByText('Обрезать крону · Москва, Тверская улица')).toBeInTheDocument()
+})
+
+test('falls back to the order id when the order is unavailable', async () => {
+  server.use(http.get('/api/v1/orders/:id', () => HttpResponse.json({}, { status: 500 })))
+
+  renderPage()
+
+  expect(await screen.findAllByText('Заказ #10')).toHaveLength(2)
+  expect(screen.getByText('Заказ #11')).toBeInTheDocument()
 })
 
 test('an empty list shows the hint', async () => {

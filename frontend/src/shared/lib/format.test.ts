@@ -1,9 +1,16 @@
-import { formatDeadline, formatMoney, formatShortDate } from './format'
+import { formatDeadline, formatMoney, formatShortDate, shortAddress } from './format'
 import { plural } from './plural'
 
 test('formats money with non-breaking spaces', () => {
   expect(formatMoney(2500)).toBe('2\u00A0500\u00A0₽')
   expect(formatMoney(0)).toBe('0\u00A0₽')
+})
+
+test('shortAddress keeps the first comma-separated segments', () => {
+  expect(shortAddress('Москва, Тверская улица, 1')).toBe('Москва, Тверская улица')
+  expect(shortAddress('Москва, Тверская улица, 1', 3)).toBe('Москва, Тверская улица, 1')
+  expect(shortAddress('Тверская улица', 2)).toBe('Тверская улица')
+  expect(shortAddress('  Москва ,  Тверская улица , 5 ')).toBe('Москва, Тверская улица')
 })
 
 test('plural picks the right russian form', () => {

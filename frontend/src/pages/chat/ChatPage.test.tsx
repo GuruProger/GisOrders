@@ -75,6 +75,13 @@ function serveDefaults(): void {
   server.use(
     http.get('/api/v1/chats/1', () => HttpResponse.json(chat)),
     http.get('/api/v1/users/3', () => HttpResponse.json({ id: 3, username: 'Иван' })),
+    http.get('/api/v1/orders/42', () =>
+      HttpResponse.json({
+        id: 42,
+        title: 'Спилить берёзу',
+        address: 'Москва, Тверская улица, 1',
+      }),
+    ),
     http.post('/api/v1/chats/1/read', () => HttpResponse.json({ message: 'Отмечено 1 сообщений' })),
   )
 }
@@ -208,7 +215,7 @@ test('groups messages by day and renders own messages on the right', async () =>
   expect(bubble('Добрый день')).toHaveAttribute('data-own', 'false')
   expect(bubble('Добрый день')).toHaveClass('bg-card')
 
-  expect(screen.getByRole('link', { name: 'К заказу' })).toHaveAttribute('href', '/orders/42')
+  expect(screen.getByRole('link', { name: 'Спилить берёзу' })).toHaveAttribute('href', '/orders/42')
   await vi.waitFor(() => expect(document.title).toBe('Иван — GisOrders'))
 })
 
