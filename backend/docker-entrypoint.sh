@@ -3,6 +3,6 @@ set -e
 
 # Схема должна быть актуальной до старта приложения, иначе первый запрос
 # упадёт на отсутствующей таблице/колонке.
-uv run alembic upgrade head
+uv run --no-sync alembic upgrade head
 
 exec "$@"
