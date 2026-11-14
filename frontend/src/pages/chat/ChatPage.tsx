@@ -41,6 +41,8 @@ const NAME_STALE_MS = 5 * 60_000
 const TYPING_TIMEOUT_MS = 3000
 const MAX_TEXT_LENGTH = 2000
 const NEAR_BOTTOM_PX = 80
+/** Scrolled up further than this: offer the «Вниз» shortcut. */
+const JUMP_TO_LATEST_PX = 300
 
 /** Negative ids keep optimistic messages apart from server ids. */
 let tempMessageId = 0
@@ -97,6 +99,9 @@ export function ChatPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [onlineSignal, setOnlineSignal] = useState(0)
+  // Visibility of the «Вниз» shortcut. The scroll position itself lives in a
+  // ref (`nearBottom`) because it drives autoscroll without re-rendering.
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
 
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -200,6 +205,8 @@ export function ChatPage() {
     setConnectionError(null)
     setConnected(false)
     setTyping(false)
+    setShowJumpToLatest(false)
+    nearBottom.current = true
     if (typingTimer.current !== null) {
       clearTimeout(typingTimer.current)
       typingTimer.current = null
@@ -363,14 +370,34 @@ export function ChatPage() {
   // Keep the view pinned to the newest message only for readers already there.
   useEffect(() => {
     const element = listRef.current
-    if (element && nearBottom.current) element.scrollTop = element.scrollHeight
+    if (element && nearBottom.current) {
+      element.scrollTop = element.scrollHeight
+      setShowJumpToLatest(false)
+    }
   }, [messages.length])
 
   function handleScroll(): void {
     const element = listRef.current
     if (!element) return
-    nearBottom.current =
-      element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX
+    const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight
+    nearBottom.current = distanceToBottom < NEAR_BOTTOM_PX
+    setShowJumpToLatest(distanceToBottom > JUMP_TO_LATEST_PX)
+  }
+
+  /** Smoothly returns to the newest message and hides the shortcut at once. */
+  function jumpToLatest(): void {
+    const element = listRef.current
+    if (!element) return
+    nearBottom.current = true
+    setShowJumpToLatest(false)
+
+    // `scrollTo` is missing in older engines and in jsdom; scrolling by
+    // assignment keeps the shortcut working without smooth animation there.
+    if (typeof element.scrollTo === 'function') {
+      element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' })
+    } else {
+      element.scrollTop = element.scrollHeight
+    }
   }
 
   const canSend =
@@ -527,62 +554,76 @@ export function ChatPage() {
         </p>
       ) : null}
 
-      <div
-        ref={listRef}
-        onScroll={handleScroll}
-        data-testid="chat-messages"
-        className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-3"
-      >
-        {messages.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
-        ) : (
-          groups.map((group, index) => (
-            <div key={`${group.day}-${index}`} className="flex flex-col gap-2">
-              <div className="flex justify-center">
-                <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-medium text-muted-strong">
-                  {formatDayLabel(group.day)}
-                </span>
-              </div>
+      <div className="relative">
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          data-testid="chat-messages"
+          className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-3"
+        >
+          {messages.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-strong">Сообщений пока нет</p>
+          ) : (
+            groups.map((group, index) => (
+              <div key={`${group.day}-${index}`} className="flex flex-col gap-2">
+                <div className="flex justify-center">
+                  <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-medium text-muted-strong">
+                    {formatDayLabel(group.day)}
+                  </span>
+                </div>
 
-              <ul className="flex flex-col gap-2">
-                {group.messages.map((message) => {
-                  const own = message.sender_id === myId
-                  const awaiting = pending?.id === message.id
+                <ul className="flex flex-col gap-2">
+                  {group.messages.map((message) => {
+                    const own = message.sender_id === myId
+                    const awaiting = pending?.id === message.id
 
-                  return (
-                    <li
-                      key={message.id}
-                      className={cn('flex', own ? 'justify-end' : 'justify-start')}
-                    >
-                      <div
-                        data-own={own ? 'true' : 'false'}
-                        data-pending={awaiting ? 'true' : 'false'}
-                        className={cn(
-                          'max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-line',
-                          own
-                            ? 'bg-moss-600 text-white'
-                            : 'border border-line bg-card text-forest-900',
-                          awaiting && 'opacity-70',
-                        )}
+                    return (
+                      <li
+                        key={message.id}
+                        className={cn('flex', own ? 'justify-end' : 'justify-start')}
                       >
-                        <p>{message.text}</p>
-                        <p
+                        <div
+                          data-own={own ? 'true' : 'false'}
+                          data-pending={awaiting ? 'true' : 'false'}
                           className={cn(
-                            'mt-1 text-[11px]',
-                            own ? 'text-sage-100' : 'text-muted',
+                            'max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-line',
+                            own
+                              ? 'bg-moss-600 text-white'
+                              : 'border border-line bg-card text-forest-900',
+                            awaiting && 'opacity-70',
                           )}
                         >
-                          {format(new Date(message.created_at), 'HH:mm')}
-                          {awaiting ? ' · Отправляется…' : null}
-                        </p>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          ))
-        )}
+                          <p>{message.text}</p>
+                          <p
+                            className={cn(
+                              'mt-1 text-[11px]',
+                              own ? 'text-sage-100' : 'text-muted',
+                            )}
+                          >
+                            {format(new Date(message.created_at), 'HH:mm')}
+                            {awaiting ? ' · Отправляется…' : null}
+                          </p>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+
+        {showJumpToLatest ? (
+          <button
+            type="button"
+            aria-label="К последнему сообщению"
+            onClick={jumpToLatest}
+            className="absolute right-3 bottom-3 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-sm font-medium text-moss-600 shadow-md transition-colors hover:bg-sage-100 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+          >
+            <span aria-hidden="true">↓</span>
+            Вниз
+          </button>
+        ) : null}
       </div>
 
       {typing ? (

@@ -56,3 +56,14 @@ test('labels today, yesterday and other days in Russian', () => {
   expect(formatDayLabel('2026-11-08', now)).toBe('Вчера')
   expect(formatDayLabel('2026-11-05', now)).toBe('5 ноября')
 })
+
+test('labels a day in another month with the genitive month name', () => {
+  const now = new Date('2026-11-09T12:00:00')
+
+  expect(formatDayLabel('2026-12-01', now)).toBe('1 декабря')
+  expect(formatDayLabel('2027-01-02', now)).toBe('2 января')
+})
+
+test('returns no sections for an empty conversation', () => {
+  expect(groupMessagesByDay([])).toEqual([])
+})

@@ -1201,3 +1201,166 @@ test('invalidates the chat detail when a late flush succeeds after unmount', asy
   )
   expect(getPendingMessage(1)).toBeNull()
 })
+
+/** jsdom has no layout: give the scroll container explicit geometry. */
+function setScrollGeometry(
+  element: HTMLElement,
+  geometry: { scrollTop: number; scrollHeight: number; clientHeight: number },
+): void {
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: geometry.scrollHeight,
+  })
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: geometry.clientHeight,
+  })
+  element.scrollTop = geometry.scrollTop
+  fireEvent.scroll(element)
+}
+
+function jumpButton(): HTMLElement | null {
+  return screen.queryByRole('button', { name: 'К последнему сообщению' })
+}
+
+test('shows the jump button only after scrolling up more than 300px', async () => {
+  renderPage()
+  await screen.findByText('Иван')
+  openSocket()
+
+  const list = screen.getByTestId('chat-messages')
+  expect(jumpButton()).not.toBeInTheDocument()
+
+  // 1200 - 0 - 400 = 800px above the bottom: the shortcut appears.
+  setScrollGeometry(list, { scrollTop: 0, scrollHeight: 1200, clientHeight: 400 })
+  expect(jumpButton()).toBeInTheDocument()
+
+  // Back at the newest message: the shortcut is not needed any more.
+  setScrollGeometry(list, { scrollTop: 800, scrollHeight: 1200, clientHeight: 400 })
+  expect(jumpButton()).not.toBeInTheDocument()
+})
+
+test('keeps the jump button hidden for a small scroll offset', async () => {
+  renderPage()
+  await screen.findByText('Иван')
+  openSocket()
+
+  const list = screen.getByTestId('chat-messages')
+  // 1200 - 950 - 400 = 150px from the bottom, below the shortcut threshold.
+  setScrollGeometry(list, { scrollTop: 950, scrollHeight: 1200, clientHeight: 400 })
+
+  expect(jumpButton()).not.toBeInTheDocument()
+})
+
+test('jumps smoothly to the newest message and hides the button', async () => {
+  renderPage()
+  await screen.findByText('Иван')
+  openSocket()
+
+  const list = screen.getByTestId('chat-messages')
+  const scrollTo = vi.fn()
+  Object.defineProperty(list, 'scrollTo', { configurable: true, value: scrollTo })
+
+  setScrollGeometry(list, { scrollTop: 0, scrollHeight: 1200, clientHeight: 400 })
+  await userEvent.click(screen.getByRole('button', { name: 'К последнему сообщению' }))
+
+  expect(scrollTo).toHaveBeenCalledWith({ top: 1200, behavior: 'smooth' })
+  expect(jumpButton()).not.toBeInTheDocument()
+})
+
+test('keeps autoscrolling for a reader at the bottom of the conversation', async () => {
+  renderPage()
+  await screen.findByText('Иван')
+  const socket = openSocket()
+
+  const list = screen.getByTestId('chat-messages')
+  setScrollGeometry(list, { scrollTop: 800, scrollHeight: 1200, clientHeight: 400 })
+
+  act(() => {
+    socket.receive({
+      type: 'message.created',
+      message: {
+        id: 310,
+        chat_id: 1,
+        sender_id: 3,
+        text: 'Новое внизу',
+        is_read: false,
+        created_at: localIso(0, 13),
+      },
+    })
+  })
+
+  expect(screen.getByText('Новое внизу')).toBeInTheDocument()
+  expect(list.scrollTop).toBe(1200)
+  expect(jumpButton()).not.toBeInTheDocument()
+})
+
+test('does not autoscroll and keeps the shortcut while the reader is above', async () => {
+  renderPage()
+  await screen.findByText('Иван')
+  const socket = openSocket()
+
+  const list = screen.getByTestId('chat-messages')
+  setScrollGeometry(list, { scrollTop: 0, scrollHeight: 1200, clientHeight: 400 })
+
+  act(() => {
+    socket.receive({
+      type: 'message.created',
+      message: {
+        id: 311,
+        chat_id: 1,
+        sender_id: 3,
+        text: 'Сообщение выше',
+        is_read: false,
+        created_at: localIso(0, 13),
+      },
+    })
+  })
+
+  expect(screen.getByText('Сообщение выше')).toBeInTheDocument()
+  expect(list.scrollTop).toBe(0)
+  expect(jumpButton()).toBeInTheDocument()
+})
+
+test('shows one day separator per section even when both authors write', async () => {
+  server.use(
+    http.get('/api/v1/chats/1', () =>
+      HttpResponse.json({
+        ...chat,
+        messages: [
+          {
+            id: 1,
+            chat_id: 1,
+            sender_id: 3,
+            text: 'Первый',
+            is_read: true,
+            created_at: localIso(0, 10),
+          },
+          {
+            id: 2,
+            chat_id: 1,
+            sender_id: user.id,
+            text: 'Второй',
+            is_read: true,
+            created_at: localIso(0, 10, 5),
+          },
+          {
+            id: 3,
+            chat_id: 1,
+            sender_id: 3,
+            text: 'Третий',
+            is_read: true,
+            created_at: localIso(0, 10, 10),
+          },
+        ],
+      }),
+    ),
+  )
+
+  renderPage()
+  await screen.findByText('Первый')
+  openSocket()
+
+  expect(screen.getAllByText('Сегодня')).toHaveLength(1)
+  expect(screen.queryByText('Вчера')).not.toBeInTheDocument()
+})
