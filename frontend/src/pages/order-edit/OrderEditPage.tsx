@@ -205,6 +205,10 @@ export function OrderEditPage() {
           <Textarea id="order-description" rows={4} disabled={locked} {...register('description')} />
         </Field>
 
+        <h2 className="mt-2 border-t border-line pt-4 text-base font-semibold text-forest-900">
+          Бюджет и срок
+        </h2>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Цена от" htmlFor="order-min-price" error={errors.min_price?.message}>
             <Input
@@ -239,10 +243,13 @@ export function OrderEditPage() {
           <Input id="order-deadline" type="datetime-local" disabled={locked} {...register('deadline')} />
         </Field>
 
+        <h2 className="mt-2 border-t border-line pt-4 text-base font-semibold text-forest-900">
+          Где и что за дерево
+        </h2>
+
         <Field
           label="Адрес"
           htmlFor="order-address"
-          hint="Поставьте точку на карте, адрес увидит исполнитель"
           error={errors.address?.message}
         >
           <Input
@@ -294,6 +301,10 @@ export function OrderEditPage() {
           </Field>
         </div>
 
+        <h2 className="mt-2 border-t border-line pt-4 text-base font-semibold text-forest-900">
+          Фото и точка на карте
+        </h2>
+
         <Field label="Фотографии" htmlFor="order-photos">
           <PhotoUploader
             photos={photos}
@@ -313,7 +324,9 @@ export function OrderEditPage() {
             }}
             disabled={locked}
           />
-          <p className="text-sm text-muted-strong">Клик по карте ставит точку заказа</p>
+          <p className="text-sm text-muted-strong">
+            Клик по карте ставит точку заказа — адрес увидит исполнитель
+          </p>
           {pointError && (
             <p role="alert" className="text-sm text-terracotta-600">
               {pointError}

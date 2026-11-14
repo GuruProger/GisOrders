@@ -1,4 +1,5 @@
 import type { FeedFilters, OrderStatus } from './types'
+import type { RoleMode } from '@/features/switch-role/model'
 
 /**
  * Single source of query keys for every screen. Keeping them in one factory
@@ -8,9 +9,12 @@ import type { FeedFilters, OrderStatus } from './types'
 export const qk = {
   orders: {
     all: ['orders'] as const,
-    available: (filters: FeedFilters) => ['orders', 'available', filters] as const,
+    // Режим работы входит в ключ поиска: смена «Заказчик/Исполнитель» меняет
+    // выдачу /orders/available, поэтому кэш ленты и карты раздельный.
+    available: (mode: RoleMode, filters: FeedFilters) =>
+      ['orders', 'available', mode, filters] as const,
     /** Single-page shape used by the map; kept apart from the infinite feed. */
-    map: (filters: FeedFilters) => ['orders', 'map', filters] as const,
+    map: (mode: RoleMode, filters: FeedFilters) => ['orders', 'map', mode, filters] as const,
     my: (status?: OrderStatus) => ['orders', 'my', status ?? 'all'] as const,
     detail: (id: number) => ['orders', 'detail', id] as const,
   },

@@ -6,7 +6,7 @@ import { qk } from '@/api/queryKeys'
 import type { FeedFilters } from '@/api/types'
 import { ActiveFilters, countActiveFilters } from '@/features/filters/ActiveFilters'
 import { FiltersSheet } from '@/features/filters/FiltersSheet'
-import { DEFAULT_FILTERS, parseFilters, toSearchParams } from '@/features/filters/model'
+import { DEFAULT_FILTERS, nextRadius, parseFilters, toSearchParams } from '@/features/filters/model'
 import { SearchBar } from '@/features/filters/SearchBar'
 import { requestGeolocation, useUserPoint } from '@/features/user-point/model'
 import { useRoleMode } from '@/features/switch-role/model'
@@ -19,7 +19,6 @@ import { MapView } from '@/widgets/map/MapView'
 import { buildMarkers } from '@/widgets/map/markers'
 
 const ORDER_FORMS: [string, string, string] = ['заказ', 'заказа', 'заказов']
-const RADIUS_STEPS = [5, 10, 25, 50] as const
 const PULL_THRESHOLD_PX = 60
 
 /** Key used while no point is known; the query is disabled in that state. */
@@ -27,10 +26,6 @@ const NO_POINT_FILTERS: FeedFilters = { ...DEFAULT_FILTERS, lat: 0, lon: 0 }
 
 const secondaryLinkClasses =
   'inline-flex min-h-11 items-center justify-center rounded-[10px] bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
-
-function nextRadius(current: number): number {
-  return RADIUS_STEPS.find((step) => step > current) ?? 50
-}
 
 function atTop(): boolean {
   const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY
@@ -65,7 +60,7 @@ export function FeedPage() {
   )
 
   const query = useInfiniteQuery({
-    queryKey: qk.orders.available(filters ?? NO_POINT_FILTERS),
+    queryKey: qk.orders.available(mode, filters ?? NO_POINT_FILTERS),
     queryFn: ({ pageParam }) => {
       if (!filters) throw new Error('Feed requires a point')
       return fetchAvailableOrders(filters, pageParam)

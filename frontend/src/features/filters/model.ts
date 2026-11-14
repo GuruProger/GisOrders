@@ -12,6 +12,14 @@ export const DEFAULT_FILTERS: Omit<FeedFilters, 'lat' | 'lon'> = {
   sortOrder: 'desc',
 }
 
+/** Шаги радиуса «увеличить радиус» в ленте и на карте. */
+export const RADIUS_STEPS = [5, 10, 25, 50] as const
+
+/** Следующий шаг радиуса после текущего; на максимуме остаётся 50 км. */
+export function nextRadius(current: number): number {
+  return RADIUS_STEPS.find((step) => step > current) ?? 50
+}
+
 const SORT_FIELDS: readonly SortField[] = ['created_at', 'deadline', 'min_price']
 const SORT_ORDERS: readonly SortOrder[] = ['asc', 'desc']
 

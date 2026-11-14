@@ -1,4 +1,10 @@
-import { formatDeadline, formatMoney, formatShortDate, shortAddress } from './format'
+import {
+  formatChatTime,
+  formatDeadline,
+  formatMoney,
+  formatShortDate,
+  shortAddress,
+} from './format'
 import { plural } from './plural'
 
 test('formats money with non-breaking spaces', () => {
@@ -20,6 +26,13 @@ test('plural picks the right russian form', () => {
   expect(plural(5, forms)).toBe('откликов')
   expect(plural(11, forms)).toBe('откликов')
   expect(plural(21, forms)).toBe('отклик')
+})
+
+test('chat time shows HH:mm today, «Вчера», then DD.MM', () => {
+  const now = new Date('2026-10-28T12:00:00+03:00')
+  expect(formatChatTime('2026-10-28T09:30:00+03:00', now)).toBe('09:30')
+  expect(formatChatTime('2026-10-27T23:10:00+03:00', now)).toBe('Вчера')
+  expect(formatChatTime('2026-08-10T10:00:00+03:00', now)).toBe('10.08')
 })
 
 test('deadline today is rendered with local time', () => {

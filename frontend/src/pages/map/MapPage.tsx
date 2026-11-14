@@ -5,7 +5,8 @@ import { fetchAvailableOrders } from '@/api/orders'
 import { qk } from '@/api/queryKeys'
 import type { FeedFilters } from '@/api/types'
 import type { Point } from '@/entities/order/lib/distance'
-import { DEFAULT_FILTERS, parseFilters } from '@/features/filters/model'
+import { DEFAULT_FILTERS, nextRadius, parseFilters, RADIUS_STEPS, toSearchParams } from '@/features/filters/model'
+import { useRoleMode } from '@/features/switch-role/model'
 import { useUserPoint } from '@/features/user-point/model'
 import { plural } from '@/shared/lib/plural'
 import { Button } from '@/shared/ui/Button'
@@ -31,8 +32,9 @@ function savedHistoryIndex(): number {
 /** Full map screen: search around the stored point and browse found orders. */
 export function MapPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [point, setPoint] = useUserPoint()
+  const [mode] = useRoleMode()
   const [draft, setDraft] = useState<Point | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [highlightId, setHighlightId] = useState<number | null>(null)
@@ -42,7 +44,7 @@ export function MapPage() {
   const filters = useMemo(() => (point ? parseFilters(search, point) : null), [point, search])
 
   const query = useQuery({
-    queryKey: qk.orders.map(filters ?? NO_POINT_FILTERS),
+    queryKey: qk.orders.map(mode, filters ?? NO_POINT_FILTERS),
     queryFn: () => {
       if (!filters) throw new Error('Map requires a point')
       return fetchAvailableOrders(filters, 1)
@@ -87,6 +89,14 @@ export function MapPage() {
     setHighlightId(null)
   }
 
+  /** Same radius steps as the feed: the next value in `RADIUS_STEPS`. */
+  function widenRadius(): void {
+    if (!filters) return
+    setSearchParams(toSearchParams({ ...filters, radiusKm: nextRadius(filters.radiusKm) }), {
+      replace: true,
+    })
+  }
+
   return (
     <section className="relative">
       <div className="relative overflow-hidden rounded-2xl border border-line bg-card">
@@ -97,10 +107,10 @@ export function MapPage() {
           highlightId={highlightId}
           onSelect={selectMarker}
           onMapClick={filters === null ? setDraft : undefined}
-          className="h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
+          className="map-screen h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-start gap-2 p-3 sm:flex-row sm:items-start sm:justify-between">
           <Button
             variant="secondary"
             size="sm"
@@ -110,9 +120,16 @@ export function MapPage() {
             Назад к списку
           </Button>
           {filters !== null && !query.isLoading && !query.isError && (
-            <p className="pointer-events-auto rounded-full bg-card px-3 py-2 text-sm font-medium text-muted-strong shadow-md">
-              {countLabel}
-            </p>
+            <div className="pointer-events-auto flex flex-wrap items-center gap-2 sm:justify-end">
+              <p className="rounded-full bg-card px-3 py-2 text-sm font-medium text-muted-strong shadow-md">
+                {countLabel}
+              </p>
+              {filters.radiusKm < Math.max(...RADIUS_STEPS) && (
+                <Button variant="secondary" size="sm" className="shadow-md" onClick={widenRadius}>
+                  Увеличить радиус
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
@@ -129,13 +146,13 @@ export function MapPage() {
         )}
 
         {query.isLoading && (
-          <p className="absolute top-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-card px-4 py-2 text-sm text-muted-strong shadow-md">
+          <p className="absolute top-32 left-1/2 sm:top-20 z-10 -translate-x-1/2 rounded-full bg-card px-4 py-2 text-sm text-muted-strong shadow-md">
             Загружаем заказы…
           </p>
         )}
 
         {query.isError && (
-          <div className="absolute top-20 left-1/2 z-10 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 flex-col items-center gap-2 rounded-xl border border-line bg-card p-4 text-center shadow-lg">
+          <div className="absolute top-32 left-1/2 sm:top-20 z-10 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 flex-col items-center gap-2 rounded-xl border border-line bg-card p-4 text-center shadow-lg">
             <p className="text-base font-semibold text-forest-900">Не удалось загрузить заказы</p>
             <p className="text-sm text-muted-strong">Проверьте соединение и попробуйте ещё раз.</p>
             <Button size="sm" onClick={() => void query.refetch()}>
@@ -145,11 +162,13 @@ export function MapPage() {
         )}
 
         {filters !== null && !query.isLoading && !query.isError && orders.length === 0 && (
-          <div className="absolute top-20 left-1/2 z-10 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-xl border border-line bg-card p-4 text-center shadow-lg">
+          <div className="absolute top-32 left-1/2 sm:top-20 z-10 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 rounded-xl border border-line bg-card p-4 text-center shadow-lg">
             <p className="text-base font-semibold text-forest-900">
               В радиусе {filters.radiusKm} км заказов нет
             </p>
-            <p className="text-sm text-muted-strong">Попробуйте изменить фильтры в списке.</p>
+            <p className="text-sm text-muted-strong">
+              Попробуйте сдвинуть точку поиска или увеличить радиус.
+            </p>
           </div>
         )}
 

@@ -32,6 +32,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The map screen draws its own header over the top-left corner, where Leaflet
+   puts the zoom buttons. Push them below the header on desktop; on touch
+   screens pinch zoom is used instead. */
+.map-screen .leaflet-top.leaflet-left { top: 4.5rem; }
+@media (max-width: 640px) {
+  .map-screen .leaflet-top.leaflet-left { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

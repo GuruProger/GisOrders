@@ -34,6 +34,17 @@ export function formatDeadline(iso: string, now: Date = new Date()): string {
 }
 
 /**
+ * Timestamp for chat rows: `HH:mm` today, «Вчера» yesterday, `10.08` afterwards.
+ * `now` is injectable so tests and callers can pin the reference day.
+ */
+export function formatChatTime(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso)
+  if (isSameDay(date, now)) return format(date, 'HH:mm')
+  if (isSameDay(date, addDays(now, -1))) return 'Вчера'
+  return format(date, 'dd.MM')
+}
+
+/**
  * Compact address for tight rows: only the first `parts` comma-separated
  * segments (`Москва, Тверская улица, 1` → `Москва, Тверская улица`).
  */

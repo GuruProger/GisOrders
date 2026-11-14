@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router'
 import type { Chat, User } from '@/api/types'
 import { useSession } from '@/features/auth/session'
-import { formatShortDate } from '@/shared/lib/format'
+import { formatChatTime } from '@/shared/lib/format'
 import { server } from '@/test/msw'
 import { TestProviders } from '@/test/providers'
 import { ChatsPage } from './ChatsPage'
@@ -130,7 +130,7 @@ test('shows the opponent name, initials and the last message time', async () => 
   expect(screen.getByText('Пётр')).toBeInTheDocument()
   expect(screen.getByText('Анна')).toBeInTheDocument()
   expect(screen.getByText('И')).toBeInTheDocument()
-  expect(screen.getAllByText(formatShortDate(older.updated_at)).length).toBeGreaterThanOrEqual(1)
+  expect(screen.getAllByText(formatChatTime(older.updated_at)).length).toBeGreaterThanOrEqual(1)
 })
 
 test('does not fetch names or guess the opponent when the own profile is unknown', async () => {
