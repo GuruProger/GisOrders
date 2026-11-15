@@ -15,7 +15,7 @@ function PlaceholderIcon() {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="size-10"
+      className="size-12"
       aria-hidden="true"
     >
       <path d="M4 17h16" />
@@ -41,9 +41,10 @@ export function PhotoGallery({ photos, title }: PhotoGalleryProps) {
       <div
         role="img"
         aria-label="Фотографии заказа отсутствуют"
-        className="flex h-52 items-center justify-center rounded-xl bg-sage-100 text-muted-strong"
+        className="flex h-36 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-sage-50 text-muted-strong"
       >
         <PlaceholderIcon />
+        <span className="text-sm">Фото не добавлено</span>
       </div>
     )
   }

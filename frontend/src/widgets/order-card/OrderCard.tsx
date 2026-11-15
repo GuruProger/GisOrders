@@ -16,12 +16,29 @@ export interface OrderCardProps {
 
 const PROPOSAL_FORMS: [string, string, string] = ['отклик', 'отклика', 'откликов']
 
+function TreeGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-5"
+      aria-hidden="true"
+    >
+      <path d="M12 3 7 10h3l-3 5h10l-3-5h3L12 3Z" />
+      <path d="M12 15v6" />
+    </svg>
+  )
+}
+
 /** Feed list item: title, distance/deadline/species, status, price, proposals. */
 export function OrderCard({ order, userPoint, onClick, selected = false }: OrderCardProps) {
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
 
   const photo = order.photos?.[0]
-  const showPhoto = Boolean(photo) && failedPhoto !== photo
   const distance = formatDistance(distanceKm(userPoint, { lat: order.lat, lon: order.lon }))
   const deadline = formatDeadline(order.deadline)
   const price = order.max_price ?? order.min_price
@@ -29,18 +46,18 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
   const content = (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-3">
-        {photo && (
-          <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100">
-            {showPhoto && (
-              <img
-                src={photo}
-                alt=""
-                className="size-11 object-cover"
-                onError={() => setFailedPhoto(photo)}
-              />
-            )}
-          </span>
-        )}
+        <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100 text-muted-strong">
+          {photo !== undefined && failedPhoto !== photo ? (
+            <img
+              src={photo}
+              alt=""
+              className="size-11 object-cover"
+              onError={() => setFailedPhoto(photo)}
+            />
+          ) : (
+            <TreeGlyph />
+          )}
+        </span>
         <div className="min-w-0 flex-1">
           <h3 className="line-clamp-2 text-base font-semibold text-forest-900">{order.title}</h3>
           <p className="mt-1 truncate text-sm text-muted-strong">
