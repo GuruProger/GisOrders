@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div aria-live="polite" role="status" className="pointer-events-none fixed inset-x-0 bottom-0 p-4">
         {toasts.map((toast) => (
-          <p key={toast.id} className="rounded-[10px] bg-forest-800 px-4 py-2 text-white">
+          <p key={toast.id} className="rounded-xl bg-forest-800 px-4 py-2 text-white">
             {toast.message}
           </p>
         ))}

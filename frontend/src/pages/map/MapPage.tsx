@@ -25,7 +25,7 @@ const NO_POINT_FILTERS: FeedFilters = { ...DEFAULT_FILTERS, ...FALLBACK_POINT }
 const DRAFT_MARKER_ID = -1
 
 const secondaryLinkClasses =
-  'inline-flex min-h-11 items-center justify-center rounded-[10px] bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
+  'inline-flex min-h-11 items-center justify-center rounded-xl bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
 
 /** Crosshair reused by the "my location" button. */
 function LocateIcon() {
@@ -153,7 +153,7 @@ export function MapPage() {
 
   return (
     <section className="relative">
-      <div className="relative overflow-hidden rounded-2xl border border-line bg-card">
+      <div className="relative overflow-hidden rounded-xl border border-line bg-card">
         <MapView
           markers={markers}
           center={center}

@@ -159,7 +159,7 @@ export function DeleteAccountDialog({ open, onClose }: DeleteAccountDialogProps)
           <button
             type="button"
             onClick={cancel}
-            className="inline-flex min-h-11 items-center justify-center rounded-[10px] px-4 font-medium text-moss-600 transition-colors hover:bg-sage-100 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 font-medium text-moss-600 transition-colors hover:bg-sage-100 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
           >
             Отмена
           </button>

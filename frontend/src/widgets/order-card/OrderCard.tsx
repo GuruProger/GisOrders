@@ -77,7 +77,7 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
             {order.proposals_count} {plural(order.proposals_count, PROPOSAL_FORMS)}
           </span>
         )}
-        <span className="ml-auto text-base font-semibold text-forest-900">
+        <span className="ml-auto text-base font-semibold text-forest-900 tabular-nums">
           {price === null ? '—' : formatMoney(price)}
         </span>
       </div>

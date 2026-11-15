@@ -25,7 +25,7 @@ const PULL_THRESHOLD_PX = 60
 const NO_POINT_FILTERS: FeedFilters = { ...DEFAULT_FILTERS, lat: 0, lon: 0 }
 
 const secondaryLinkClasses =
-  'inline-flex min-h-11 items-center justify-center rounded-[10px] bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
+  'inline-flex min-h-11 items-center justify-center rounded-xl bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
 
 function atTop(): boolean {
   const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY
@@ -330,7 +330,7 @@ export function FeedPage() {
           <aside
             data-testid="feed-map"
             aria-label="Карта заказов"
-            className="hidden overflow-hidden rounded-2xl border border-line bg-card lg:sticky lg:top-24 lg:block lg:h-[calc(100dvh-8rem)]"
+            className="hidden overflow-hidden rounded-xl border border-line bg-card lg:sticky lg:top-24 lg:block lg:h-[calc(100dvh-8rem)]"
           >
             <MapView
               markers={mapMarkers}

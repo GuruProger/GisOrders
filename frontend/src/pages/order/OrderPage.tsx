@@ -51,7 +51,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-xs font-medium tracking-wide text-muted uppercase">{label}</dt>
-      <dd className="text-base text-forest-900">{value}</dd>
+      <dd className="text-base text-forest-900 tabular-nums">{value}</dd>
     </div>
   )
 }
@@ -241,7 +241,7 @@ export function OrderPage() {
             </div>
             <p className="text-sm text-muted-strong">
               Ваша цена:{' '}
-              <span className="text-base font-semibold text-forest-900">
+              <span className="text-base font-semibold text-forest-900 tabular-nums">
                 {formatMoney(myProposal.proposed_price)}
               </span>
             </p>
@@ -358,7 +358,7 @@ export function OrderPage() {
 
               <p className="text-sm text-muted-strong">
                 Ваша цена:{' '}
-                <span className="text-base font-semibold text-forest-900">
+                <span className="text-base font-semibold text-forest-900 tabular-nums">
                   {formatMoney(myProposal.proposed_price)}
                 </span>
               </p>

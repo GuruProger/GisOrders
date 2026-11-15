@@ -131,7 +131,7 @@ export function ChatsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <p className="truncate font-semibold text-forest-900">{name}</p>
-                      <span className="ml-auto shrink-0 text-xs text-muted">
+                      <span className="ml-auto shrink-0 text-xs text-muted tabular-nums">
                         {formatChatTime(chat.updated_at)}
                       </span>
                     </div>

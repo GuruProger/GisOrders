@@ -34,7 +34,7 @@ export function Header() {
             <Link
               to="/orders/new"
               aria-label="Создать заказ"
-              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-[10px] bg-moss-600 px-3 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500 max-[399px]:w-11 max-[399px]:px-0"
+              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-moss-600 px-3 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500 max-[399px]:w-11 max-[399px]:px-0"
             >
               <span aria-hidden="true" className="text-base leading-none">+</span>
               <span className="max-[399px]:hidden">Создать заказ</span>

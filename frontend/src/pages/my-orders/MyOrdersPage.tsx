@@ -34,7 +34,7 @@ function OrderSummary({ order }: { order: Order }) {
       <Card className="p-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-base font-semibold text-forest-900">
+            <h3 className="text-base font-semibold text-forest-900 tabular-nums">
               <Link
                 to={`/orders/${order.id}`}
                 className="hover:underline focus-visible:underline focus-visible:outline-none"
@@ -56,7 +56,7 @@ function OrderSummary({ order }: { order: Order }) {
                   ? 'Пока нет откликов'
                   : `${order.proposals_count} ${plural(order.proposals_count, PROPOSAL_FORMS)}`)}
             </span>
-            <span className="text-base font-semibold text-forest-900">
+            <span className="text-base font-semibold text-forest-900 tabular-nums">
               {order.max_price !== null
                 ? formatMoney(order.max_price)
                 : order.min_price !== null
@@ -77,7 +77,7 @@ function WorkSummary({ proposal }: { proposal: ProposalWithOrder }) {
       <Card className="p-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-base font-semibold text-forest-900">
+            <h3 className="text-base font-semibold text-forest-900 tabular-nums">
               <Link
                 to={`/orders/${proposal.order_id}`}
                 className="hover:underline focus-visible:underline focus-visible:outline-none"
@@ -96,7 +96,7 @@ function WorkSummary({ proposal }: { proposal: ProposalWithOrder }) {
 
           <p className="text-sm text-muted-strong">
             Ваша цена:{' '}
-            <span className="text-base font-semibold text-forest-900">
+            <span className="text-base font-semibold text-forest-900 tabular-nums">
               {formatMoney(proposal.proposed_price)}
             </span>
           </p>
@@ -133,7 +133,7 @@ function CreateOrderLink() {
   return (
     <Link
       to="/orders/new"
-      className="inline-flex min-h-11 items-center justify-center gap-1 rounded-[10px] bg-moss-600 px-4 text-base font-medium text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+      className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl bg-moss-600 px-4 text-base font-medium text-white transition-colors hover:bg-leaf-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
     >
       <span aria-hidden="true" className="text-lg leading-none">+</span>
       Создать заказ

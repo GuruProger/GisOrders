@@ -31,7 +31,7 @@ function ProposalCard({
       <Card className="p-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-base font-semibold text-forest-900">
+            <h3 className="text-base font-semibold text-forest-900 tabular-nums">
               <Link
                 to={`/orders/${proposal.order_id}`}
                 className="hover:underline focus-visible:underline focus-visible:outline-none"
@@ -48,7 +48,7 @@ function ProposalCard({
 
           <p className="text-sm text-muted-strong">
             Ваша цена:{' '}
-            <span className="text-base font-semibold text-forest-900">
+            <span className="text-base font-semibold text-forest-900 tabular-nums">
               {formatMoney(proposal.proposed_price)}
             </span>
           </p>

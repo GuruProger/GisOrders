@@ -58,7 +58,7 @@ function parseNonNegative(raw: string): number | null {
 }
 
 const selectClasses =
-  'min-h-11 w-full rounded-[10px] border border-line bg-card px-3 text-base text-forest-900 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
+  'min-h-11 w-full rounded-xl border border-line bg-card px-3 text-base text-forest-900 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none'
 
 const chipClasses = (selected: boolean): string =>
   cn(
@@ -284,7 +284,7 @@ export function FiltersSheet({ open, value, total, onApply, onClose }: FiltersSh
               </Button>
               <Link
                 to="/map"
-                className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-line px-4 text-base font-medium text-moss-600 transition-colors hover:border-moss-600 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-4 text-base font-medium text-moss-600 transition-colors hover:border-moss-600 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
               >
                 Указать на карте
               </Link>
