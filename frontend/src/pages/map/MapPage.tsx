@@ -266,7 +266,7 @@ export function MapPage() {
             <div
               role="list"
               aria-label="Найденные заказы"
-              className="flex snap-x gap-3 overflow-x-auto pb-1"
+              className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pt-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {orders.map((order) => (
                 <div
