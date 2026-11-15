@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router'
 import { RegisterForm } from '@/features/auth/RegisterForm'
 import { returnPath } from '@/shared/lib/returnPath'
+import { AuthLayout } from '@/widgets/auth-layout/AuthLayout'
 
 export function RegisterPage() {
   const navigate = useNavigate()
@@ -8,21 +9,23 @@ export function RegisterPage() {
   const from = returnPath(location.state)
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-4 py-10">
-      <h1 className="text-2xl font-semibold text-forest-900">Регистрация</h1>
-
+    <AuthLayout
+      title="Регистрация"
+      subtitle="Создайте аккаунт, чтобы публиковать заказы и откликаться."
+      footer={
+        <p>
+          Уже есть аккаунт?{' '}
+          <Link
+            className="inline-flex min-h-11 items-center font-medium text-moss-600 underline"
+            to="/login"
+            state={location.state}
+          >
+            Войти
+          </Link>
+        </p>
+      }
+    >
       <RegisterForm onSubmit={() => navigate(from, { replace: true })} />
-
-      <p className="text-sm text-muted-strong">
-        Уже есть аккаунт?{' '}
-        <Link
-          className="inline-flex min-h-11 items-center font-medium text-moss-600 underline"
-          to="/login"
-          state={location.state}
-        >
-          Войти
-        </Link>
-      </p>
-    </main>
+    </AuthLayout>
   )
 }
