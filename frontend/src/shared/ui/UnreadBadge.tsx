@@ -17,7 +17,7 @@ export function UnreadBadge({ count, className }: UnreadBadgeProps) {
     <span
       aria-label={`${count} ${plural(count, ['непрочитанное', 'непрочитанных', 'непрочитанных'])}`}
       className={cn(
-        'inline-flex min-w-5 items-center justify-center rounded-full bg-terracotta-600 px-1.5 text-[11px] font-semibold leading-5 text-white',
+        'inline-flex min-w-5 items-center justify-center rounded-full bg-moss-600 px-1.5 text-[11px] font-semibold leading-5 text-white tabular-nums',
         className,
       )}
     >

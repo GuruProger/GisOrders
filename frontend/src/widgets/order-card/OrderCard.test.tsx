@@ -37,7 +37,7 @@ test('shows distance, price and proposals count', () => {
 
 test('zero proposals are shown as new order', () => {
   render(<OrderCard order={{ ...baseOrder, proposals_count: 0 }} userPoint={{ lat: 55.7558, lon: 37.6173 }} />)
-  expect(screen.getByText('новый')).toBeInTheDocument()
+  expect(screen.getByText('Новый')).toBeInTheDocument()
 })
 
 test('missing photos do not break the card', () => {

@@ -15,6 +15,7 @@ import { EmptyState } from '@/shared/ui/EmptyState'
 import { Skeleton } from '@/shared/ui/Skeleton'
 
 const PROPOSAL_FORMS: [string, string, string] = ['отклик', 'отклика', 'откликов']
+const ORDER_FORMS: [string, string, string] = ['заказ', 'заказа', 'заказов']
 
 const ORDER_GROUPS: Array<{ status: OrderStatus; title: string }> = [
   { status: 'open', title: 'Открытые' },
@@ -109,7 +110,9 @@ function GroupHeading({ title, count }: { title: string; count: number }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <h2 className="text-lg font-semibold text-forest-900">{title}</h2>
-      <span className="text-sm text-muted-strong">{count}</span>
+      <span className="text-sm text-muted-strong tabular-nums">
+        {count} {plural(count, ORDER_FORMS)}
+      </span>
     </div>
   )
 }

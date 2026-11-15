@@ -4,7 +4,6 @@ import { distanceKm, formatDistance, type Point } from '@/entities/order/lib/dis
 import { cn } from '@/shared/lib/cn'
 import { formatDeadline, formatMoney } from '@/shared/lib/format'
 import { plural } from '@/shared/lib/plural'
-import { Badge } from '@/shared/ui/Badge'
 import { Card } from '@/shared/ui/Card'
 
 export interface OrderCardProps {
@@ -68,10 +67,10 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
       </div>
 
       <div className="flex items-center gap-2">
-        <Badge status={order.status} />
         {order.proposals_count === 0 ? (
-          <span className="inline-flex min-h-6 items-center rounded-full bg-sage-100 px-2.5 py-0.5 text-xs font-medium text-moss-600">
-            новый
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-moss-600">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-leaf-500" />
+            Новый
           </span>
         ) : (
           <span className="text-xs text-muted-strong">
