@@ -124,7 +124,7 @@ export function MyProposalsPage() {
           action={
             <Link
               to="/"
-              className="inline-flex min-h-11 items-center text-sm font-medium text-moss-600 hover:underline focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-sage-100 px-4 text-base font-medium text-moss-600 transition-colors hover:bg-mint-300 focus-visible:ring-2 focus-visible:ring-leaf-500 focus-visible:outline-none"
             >
               К ленте
             </Link>

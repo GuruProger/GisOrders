@@ -488,10 +488,20 @@ export function ChatPage() {
   if (chat === undefined) {
     if (query.isLoading) {
       return (
-        <section className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+        <section className="mx-auto flex min-h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:min-h-[calc(100dvh-11rem)]">
           <Skeleton className="h-12 w-2/3" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-12 w-full" />
+          <div className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl border border-line bg-surface p-3">
+            <div className="flex justify-start">
+              <Skeleton rounded={false} className="h-16 w-3/5 rounded-2xl" />
+            </div>
+            <div className="flex justify-end">
+              <Skeleton rounded={false} className="h-12 w-1/2 rounded-2xl" />
+            </div>
+            <div className="flex justify-start">
+              <Skeleton rounded={false} className="h-20 w-2/3 rounded-2xl" />
+            </div>
+          </div>
+          <Skeleton className="h-11 w-full" />
         </section>
       )
     }

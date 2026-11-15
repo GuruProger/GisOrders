@@ -20,7 +20,7 @@ function DefaultIcon() {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="size-8"
+      className="size-9"
     >
       <path d="M4 20h16" />
       <path d="M12 4v4" />
@@ -32,8 +32,11 @@ function DefaultIcon() {
 /** Empty list state: icon, title, description and an optional action. */
 export function EmptyState({ title, description, icon, action, className }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center gap-2 px-6 py-10 text-center', className)}>
-      <span aria-hidden="true" className="text-muted">
+    <div className={cn('flex flex-col items-center gap-3 px-6 py-12 text-center', className)}>
+      <span
+        aria-hidden="true"
+        className="grid size-16 place-items-center rounded-full bg-sage-100 text-moss-600"
+      >
         {icon ?? <DefaultIcon />}
       </span>
       <p className="text-base font-semibold text-forest-900">{title}</p>
