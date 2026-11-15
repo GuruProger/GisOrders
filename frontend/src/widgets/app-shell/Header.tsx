@@ -30,6 +30,8 @@ export function Header() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          <RoleSwitch />
+
           {mode === 'customer' && (
             <Link
               to="/orders/new"
@@ -41,16 +43,14 @@ export function Header() {
             </Link>
           )}
 
-          <RoleSwitch />
+          <Link
+            to="/profile"
+            aria-label="Открыть профиль"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
+          >
+            <Avatar name={user?.username} />
+          </Link>
         </div>
-
-        <Link
-          to="/profile"
-          aria-label="Открыть профиль"
-          className="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf-500"
-        >
-          <Avatar name={user?.username} />
-        </Link>
       </div>
     </header>
   )
