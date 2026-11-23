@@ -10,7 +10,7 @@ test('executor nav renames orders and proposals', () => {
   expect(navItems('executor').map((item) => item.label)).toEqual([
     'Лента',
     'Мои работы',
-    'Мои отклики',
+    'Отклики',
     'Чаты',
     'Профиль',
   ])

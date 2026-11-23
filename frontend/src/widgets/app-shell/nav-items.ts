@@ -18,7 +18,7 @@ export function navItems(mode: RoleMode): NavItem[] {
   return [
     { to: '/', label: 'Лента', icon: 'list' },
     { to: '/my/orders', label: isExecutor ? 'Мои работы' : 'Мои заказы', icon: 'briefcase' },
-    { to: '/my/proposals', label: isExecutor ? 'Мои отклики' : 'Отклики', icon: 'send' },
+    { to: '/my/proposals', label: 'Отклики', icon: 'send' },
     { to: '/chats', label: 'Чаты', icon: 'chat' },
     { to: '/profile', label: 'Профиль', icon: 'user' },
   ]
