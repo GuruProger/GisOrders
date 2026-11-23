@@ -376,7 +376,37 @@ export function ChatPage() {
     }
   }, [messages.length])
 
+  // On first load the flex layout may settle after the messages render, so pin
+  // to the newest message once more on the next frame. Never yank the view if
+  // the reader already scrolled while the frame was pending.
+  const initialScrollFor = useRef<number | null>(null)
+  const userScrolled = useRef(false)
+  useEffect(() => {
+    userScrolled.current = false
+  }, [id])
+  useEffect(() => {
+    if (messages.length === 0 || initialScrollFor.current === id) return
+    const element = listRef.current
+    if (!element) return
+    initialScrollFor.current = id
+
+    const scroll = () => {
+      if (userScrolled.current) return
+      element.scrollTop = element.scrollHeight
+      nearBottom.current = true
+      setShowJumpToLatest(false)
+    }
+
+    if (typeof requestAnimationFrame !== 'function') {
+      scroll()
+      return
+    }
+    const frame = requestAnimationFrame(scroll)
+    return () => cancelAnimationFrame(frame)
+  }, [id, messages.length])
+
   function handleScroll(): void {
+    userScrolled.current = true
     const element = listRef.current
     if (!element) return
     const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight
@@ -488,7 +518,7 @@ export function ChatPage() {
   if (chat === undefined) {
     if (query.isLoading) {
       return (
-        <section className="mx-auto flex min-h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:min-h-[calc(100dvh-11rem)]">
+        <section className="mx-auto flex h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:h-[calc(100dvh-11rem)]">
           <Skeleton className="h-12 w-2/3" />
           <div className="flex min-h-0 flex-1 flex-col gap-4 rounded-xl border border-line bg-surface p-3">
             <div className="flex justify-start">
@@ -516,7 +546,7 @@ export function ChatPage() {
   }
 
   return (
-    <section className="mx-auto flex min-h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:min-h-[calc(100dvh-11rem)]">
+    <section className="mx-auto flex h-[calc(100dvh-9.5rem)] w-full max-w-3xl flex-col gap-3 pb-2 lg:h-[calc(100dvh-11rem)]">
       <header className="flex flex-col gap-2 border-b border-line pb-3">
         <Link
           to="/chats"
@@ -564,7 +594,7 @@ export function ChatPage() {
         </p>
       ) : null}
 
-      <div className="relative">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={listRef}
           onScroll={handleScroll}
