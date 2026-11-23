@@ -56,13 +56,17 @@ function OrderSummary({ order }: { order: Order }) {
                   ? 'Пока нет откликов'
                   : `${order.proposals_count} ${plural(order.proposals_count, PROPOSAL_FORMS)}`)}
             </span>
-            <span className="text-base font-semibold text-forest-900 tabular-nums">
-              {order.max_price !== null
-                ? formatMoney(order.max_price)
-                : order.min_price !== null
-                  ? formatMoney(order.min_price)
-                  : '—'}
-            </span>
+            {order.max_price !== null || order.min_price !== null ? (
+              <span className="text-base font-semibold text-forest-900 tabular-nums">
+                {order.max_price !== null
+                  ? formatMoney(order.max_price)
+                  : order.min_price !== null
+                    ? formatMoney(order.min_price)
+                    : null}
+              </span>
+            ) : (
+              <span className="text-xs font-medium text-muted">Цена не указана</span>
+            )}
           </div>
         </div>
       </Card>
@@ -166,7 +170,7 @@ export function MyOrdersPage() {
   )
 
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 pb-6">
+    <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 pb-6">
       <h1 className="text-2xl font-semibold text-forest-900">
         {isExecutor ? 'Мои работы' : 'Мои заказы'}
       </h1>
@@ -208,7 +212,7 @@ export function MyOrdersPage() {
           return (
             <section key={status} className="flex flex-col gap-2" aria-label={title}>
               <GroupHeading title={title} count={group.length} />
-              <ul className="flex flex-col gap-3">
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {group.map((order) => (
                   <OrderSummary key={order.id} order={order} />
                 ))}
@@ -236,7 +240,7 @@ export function MyOrdersPage() {
           return (
             <section key={status} className="flex flex-col gap-2" aria-label={title}>
               <GroupHeading title={title} count={group.length} />
-              <ul className="flex flex-col gap-3">
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {group.map((proposal) => (
                   <WorkSummary key={proposal.id} proposal={proposal} />
                 ))}
