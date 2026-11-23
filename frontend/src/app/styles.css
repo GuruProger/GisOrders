@@ -40,6 +40,17 @@ body {
   .map-screen .leaflet-top.leaflet-left { display: none; }
 }
 
+/* Keep Chrome's autofill from painting fields in its default blue. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-card) inset;
+  -webkit-text-fill-color: var(--color-forest-900);
+  caret-color: var(--color-forest-900);
+  transition: background-color 9999s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
