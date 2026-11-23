@@ -45,17 +45,18 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
   const content = (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100 text-muted-strong">
+        <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sage-100 text-muted-strong">
+          <span className="absolute inset-0 grid place-items-center">
+            <TreeGlyph />
+          </span>
           {photo !== undefined && failedPhoto !== photo ? (
             <img
               src={photo}
               alt=""
-              className="size-11 object-cover"
+              className="relative size-11 object-cover"
               onError={() => setFailedPhoto(photo)}
             />
-          ) : (
-            <TreeGlyph />
-          )}
+          ) : null}
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="line-clamp-2 text-base font-semibold text-forest-900">{order.title}</h3>
@@ -77,9 +78,13 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
             {order.proposals_count} {plural(order.proposals_count, PROPOSAL_FORMS)}
           </span>
         )}
-        <span className="ml-auto text-base font-semibold text-forest-900 tabular-nums">
-          {price === null ? '—' : formatMoney(price)}
-        </span>
+        {price === null ? (
+          <span className="ml-auto text-xs font-medium text-muted">Цена не указана</span>
+        ) : (
+          <span className="ml-auto text-base font-semibold text-forest-900 tabular-nums">
+            {formatMoney(price)}
+          </span>
+        )}
       </div>
     </div>
   )
