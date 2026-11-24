@@ -14,7 +14,7 @@ export function Header() {
       role="banner"
       className="sticky top-0 z-30 border-b border-line bg-card pt-[env(safe-area-inset-top)]"
     >
-      <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-2 px-4">
+      <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-2 px-4 max-[359px]:gap-1 max-[359px]:px-3">
         <Link
           to="/"
           aria-label="GisOrders — на главную"
@@ -29,7 +29,7 @@ export function Header() {
           <span className="hidden text-lg sm:inline">GisOrders</span>
         </Link>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 max-[359px]:gap-1">
           <RoleSwitch />
 
           {mode === 'customer' && (
