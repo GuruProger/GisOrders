@@ -162,7 +162,7 @@ export function MapPage() {
           onSelect={selectMarker}
           onMapClick={filters === null ? setDraft : undefined}
           fitBounds
-          className="map-screen h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
+          className="map-screen h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
         />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-start gap-2 p-3 sm:flex-row sm:items-start sm:justify-between">
