@@ -9,9 +9,9 @@ test('builds one marker per order with price label', () => {
   ])
 })
 
-test('order without price gets null price and dash label', () => {
+test('order without price gets an explicit label', () => {
   const markers = buildMarkers([
     { id: 8, lat: 55.7, lon: 37.6, min_price: null, max_price: null } as never,
   ])
-  expect(markers[0]).toMatchObject({ price: null, label: '—' })
+  expect(markers[0]).toMatchObject({ price: null, label: 'Без цены' })
 })

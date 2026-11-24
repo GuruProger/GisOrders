@@ -18,7 +18,7 @@ export function buildMarkers(orders: Order[]): MapMarker[] {
       lat: order.lat,
       lon: order.lon,
       price,
-      label: price === null ? '—' : formatMoney(price),
+      label: price === null ? 'Без цены' : formatMoney(price),
     }
   })
 }

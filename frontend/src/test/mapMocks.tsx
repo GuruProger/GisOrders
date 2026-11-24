@@ -14,6 +14,7 @@ type MapClickHandler = (event: MockMapClickEvent) => void
 export const mapApi = {
   setView: vi.fn(),
   flyTo: vi.fn(),
+  fitBounds: vi.fn(),
   invalidateSize: vi.fn(),
   getContainer: () => document.body,
   click: null as MapClickHandler | null,
@@ -23,6 +24,7 @@ export const mapApi = {
 export function resetMapApi(): void {
   mapApi.setView.mockClear()
   mapApi.flyTo.mockClear()
+  mapApi.fitBounds.mockClear()
   mapApi.invalidateSize.mockClear()
   mapApi.click = null
 }

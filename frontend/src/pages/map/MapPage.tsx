@@ -161,6 +161,7 @@ export function MapPage() {
           highlightId={highlightId}
           onSelect={selectMarker}
           onMapClick={filters === null ? setDraft : undefined}
+          fitBounds
           className="map-screen h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] min-h-96 lg:h-[calc(100dvh-11rem)]"
         />
 

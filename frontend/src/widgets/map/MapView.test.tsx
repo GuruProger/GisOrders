@@ -17,6 +17,7 @@ const center = { lat: 55.75, lon: 37.61 }
 beforeEach(() => {
   mapApi.setView.mockClear()
   mapApi.flyTo.mockClear()
+  mapApi.fitBounds.mockClear()
 })
 
 afterEach(() => {
@@ -79,4 +80,22 @@ test('highlighting a marker does not move the viewport', () => {
   render(<MapView markers={markers} center={center} highlightId={8} />)
 
   expect(mapApi.flyTo).not.toHaveBeenCalled()
+})
+
+test('fits the user point and every marker into view when asked', () => {
+  render(<MapView markers={markers} center={center} fitBounds />)
+
+  expect(mapApi.fitBounds).toHaveBeenCalledTimes(1)
+  const [bounds, options] = mapApi.fitBounds.mock.calls[0]!
+  expect(bounds.getNorthEast().lat).toBeCloseTo(55.8)
+  expect(bounds.getNorthEast().lng).toBeCloseTo(37.7)
+  expect(bounds.getSouthWest().lat).toBeCloseTo(55.7)
+  expect(bounds.getSouthWest().lng).toBeCloseTo(37.6)
+  expect(options).toMatchObject({ maxZoom: expect.any(Number) })
+})
+
+test('does not fit bounds without results', () => {
+  render(<MapView markers={[]} center={center} fitBounds />)
+
+  expect(mapApi.fitBounds).not.toHaveBeenCalled()
 })

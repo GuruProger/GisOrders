@@ -337,6 +337,7 @@ export function FeedPage() {
               center={point}
               highlightId={highlightId}
               onSelect={highlightOrder}
+              fitBounds
               className="h-full"
             />
           </aside>

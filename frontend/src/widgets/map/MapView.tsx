@@ -23,6 +23,8 @@ export interface MapViewProps {
   className?: string
   /** Enables point picking: called with the coordinates of a map click. */
   onMapClick?(point: Point): void
+  /** Fits the user point and every marker into view when the results change. */
+  fitBounds?: boolean
 }
 
 /** Price pill with a small stem, matching the feed's money formatting. */
@@ -49,8 +51,7 @@ interface RecenterProps {
 }
 
 /** Keeps the viewport on the user point and follows the selected marker. */
-function Recenter({ center, selected }: RecenterProps) {
-  const map = useMap()
+function Recenter({ center, selected }: RecenterProps) {  const map = useMap()
   const { lat, lon } = center
   const selectedId = selected?.id
   const selectedLat = selected?.lat
@@ -64,6 +65,27 @@ function Recenter({ center, selected }: RecenterProps) {
     if (selectedLat === undefined || selectedLon === undefined) return
     map.flyTo([selectedLat, selectedLon], FOCUS_ZOOM)
   }, [map, selectedId, selectedLat, selectedLon])
+
+  return null
+}
+
+/** Fits the user point and the visible results so markers are never off-screen. */
+function FitBounds({ center, markers }: { center: Point; markers: MapMarker[] }) {
+  const map = useMap()
+  const markerSignature = markers.map((marker) => `${marker.id}:${marker.lat}:${marker.lon}`).join('|')
+
+  useEffect(() => {
+    if (markers.length === 0) return
+
+    const corners: Array<[number, number]> = [
+      [center.lat, center.lon],
+      ...markers.map((marker): [number, number] => [marker.lat, marker.lon]),
+    ]
+
+    map.fitBounds(L.latLngBounds(corners), { padding: [96, 56], maxZoom: FOCUS_ZOOM })
+    // `markerSignature` collapses the array identity into the values that matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, center.lat, center.lon, markerSignature])
 
   return null
 }
@@ -104,6 +126,7 @@ export function MapView({
   onSelect,
   className,
   onMapClick,
+  fitBounds = false,
 }: MapViewProps) {
   const selected = markers.find((marker) => marker.id === selectedId) ?? null
 
@@ -117,6 +140,8 @@ export function MapView({
       <TileLayer url={TILE_URL} attribution={ATTRIBUTION} />
 
       <Recenter center={center} selected={selected} />
+
+      {fitBounds && <FitBounds center={center} markers={markers} />}
 
       <MapSizer />
 
