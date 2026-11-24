@@ -53,6 +53,8 @@ export function OrderCard({ order, userPoint, onClick, selected = false }: Order
             <img
               src={photo}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="relative size-11 object-cover"
               onError={() => setFailedPhoto(photo)}
             />

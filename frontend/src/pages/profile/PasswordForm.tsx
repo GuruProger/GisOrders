@@ -144,7 +144,7 @@ export function PasswordForm() {
         </p>
       )}
 
-      <Button type="submit" loading={mutation.isPending}>
+      <Button type="submit" loading={mutation.isPending} className="sm:self-end sm:px-6">
         Изменить пароль
       </Button>
     </form>

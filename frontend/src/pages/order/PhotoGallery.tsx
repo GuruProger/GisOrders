@@ -60,6 +60,8 @@ export function PhotoGallery({ photos, title }: PhotoGalleryProps) {
           key={`${photo}-${index}`}
           src={photo}
           alt={`${title}, фото ${index + 1}`}
+          loading="lazy"
+          decoding="async"
           onError={() => markFailed(photo)}
           className={cn(
             'h-52 w-full shrink-0 snap-center rounded-xl border border-line bg-sage-100 object-cover',

@@ -107,7 +107,7 @@ function ProfileForm({ user }: { user: User }) {
         </p>
       )}
 
-      <Button type="submit" loading={mutation.isPending}>
+      <Button type="submit" loading={mutation.isPending} className="sm:self-end sm:px-6">
         Сохранить
       </Button>
     </form>

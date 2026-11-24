@@ -51,6 +51,13 @@ textarea:-webkit-autofill {
   transition: background-color 9999s ease-out;
 }
 
+/* Native date/time pickers otherwise follow the OS dark theme. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: light;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
