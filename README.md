@@ -1,10 +1,15 @@
 # GisOrders
 
-Бэкенд-сервис для заказа валки и спила деревьев: заказчик создаёт заказ с координатами
+Сервис для заказа валки и спила деревьев: заказчик создаёт заказ с координатами
 и характеристиками дерева, исполнители отправляют отклики, а по каждому отклику
 автоматически открывается чат между участниками.
 
+Проект состоит из FastAPI-бэкенда и React SPA (PWA) с картой, чатами и
+real-time обновлениями.
+
 ## Стек
+
+### Бэкенд
 
 - Python 3.12+, FastAPI, Uvicorn
 - SQLAlchemy 2.0 (async) + asyncpg
@@ -13,6 +18,14 @@
 - JWT (python-jose), bcrypt
 - Redis (rate limiting, WebSocket pub/sub) — опционально
 - pytest + httpx, uv
+
+### Фронтенд
+
+- React 19, Vite, TypeScript
+- React Query, React Router, Zustand
+- Leaflet + OpenStreetMap
+- Tailwind CSS, PWA (vite-plugin-pwa)
+- Vitest + Testing Library, Playwright
 
 ## Структура
 
@@ -28,6 +41,18 @@ backend/
 │   └── ws/                  # WebSocket-события чатов
 ├── alembic/versions/        # миграции
 └── tests/                   # pytest: фикстуры и интеграционные тесты
+```
+
+```
+frontend/
+├── e2e/                     # Playwright-сценарии
+└── src/
+    ├── app/                 # провайдеры, роутинг, глобальные стили
+    ├── pages/               # экраны приложения
+    ├── widgets/             # композитные блоки (шапка, карта, карточки)
+    ├── features/            # пользовательские действия
+    ├── entities/            # модели и API-клиенты
+    └── shared/              # UI-кит и утилиты
 ```
 
 Каждый модуль разделён на `models` (SQLAlchemy), `schemas` (Pydantic),
@@ -46,6 +71,18 @@ curl http://localhost:8000/health
 API будет доступен на `http://localhost:8000`, OpenAPI — на `/docs`.
 При первом создании тома Postgres скрипт `backend/init-db.sh` создаёт
 тестовую БД `gisorders_test` с расширением PostGIS.
+
+### Frontend
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Приложение откроется на `http://127.0.0.1:5173`. Vite проксирует `/api` и
+`/media` на бэкенд `http://127.0.0.1:8000`, поэтому backend должен быть
+запущен. Подробности — в `frontend/README.md`.
 
 ### Production
 
@@ -186,6 +223,8 @@ uv run python scripts/create_admin.py --email admin@example.com
 
 ## Тесты
 
+### Бэкенд
+
 Тестам нужна отдельная БД `gisorders_test` с PostGIS (создаётся `init-db.sh`).
 Каждый тест выполняется в транзакции с откатом, поэтому данные не накапливаются.
 
@@ -195,9 +234,31 @@ uv run pytest --cov=api --cov=core --cov-report=term-missing
 uv run ruff check .
 ```
 
-Порог покрытия — 75%; CI также проверяет миграции и линтер. Отдельная job
-`frontend` запускает unit-тесты, `npm run typecheck` и `npm run build` из
-каталога `frontend/`.
+### Фронтенд
+
+```bash
+cd frontend
+npm test            # unit/component-тесты (Vitest + MSW)
+npm run typecheck   # tsc -b
+npm run build       # production-сборка
+
+npx playwright install chromium webkit  # один раз
+npx playwright test                     # e2e: backend :8000 + Vite :5173
+```
+
+E2E-сценарии сами создают тестовые аккаунты через API
+(`customer_test@example.com` / `executor_test@example.com`, пароль
+`Testpass123`). Vite Playwright запускает автоматически, бэкенд должен быть
+запущен заранее.
+
+### CI
+
+GitHub Actions (`.github/workflows/ci.yml`) проверяет:
+
+- `test` — миграции, `alembic check`, `ruff`, pytest с порогом покрытия 75%;
+- `frontend` — unit-тесты, typecheck и production-сборку;
+- `e2e` — Playwright на PostGIS-сервисе с живым бэкендом и Vite;
+- `docker` — сборку production-образов backend и frontend.
 
 ## Обслуживание
 
