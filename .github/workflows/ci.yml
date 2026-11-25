@@ -41,7 +41,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          # Coverage tracing under Python 3.12 undercounts async/greenlet code
+          # (67% vs 77% for the same tests). The e2e job still runs the app on
+          # 3.12, so runtime compatibility remains covered.
+          python-version: "3.14"
           enable-cache: true
 
       - name: Install dependencies
@@ -77,7 +80,22 @@ jobs:
         run: uv run ruff check .
 
       - name: Run tests
-        run: uv run pytest -q --cov=api --cov=core --cov-report=term-missing
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=api --cov=core --cov-report=term-missing 2>&1 | tee /tmp/pytest.log
+
+      - name: Annotate test failure
+        if: failure()
+        run: |
+          if [ -f /tmp/pytest.log ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('/tmp/pytest.log').read_text(errors='replace')[-20000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=Pytest failure::{text}')
+          PY
+          fi
 
   frontend:
     runs-on: ubuntu-latest
