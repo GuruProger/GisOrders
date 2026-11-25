@@ -29,18 +29,22 @@ test('plural picks the right russian form', () => {
 })
 
 test('chat time shows HH:mm today, «Вчера», then DD.MM', () => {
-  const now = new Date('2026-10-28T12:00:00+03:00')
-  expect(formatChatTime('2026-10-28T09:30:00+03:00', now)).toBe('09:30')
-  expect(formatChatTime('2026-10-27T23:10:00+03:00', now)).toBe('Вчера')
-  expect(formatChatTime('2026-08-10T10:00:00+03:00', now)).toBe('10.08')
+  const local = (y: number, m: number, d: number, h: number, min = 0) =>
+    new Date(y, m - 1, d, h, min)
+  const now = local(2026, 10, 28, 12, 0)
+  expect(formatChatTime(local(2026, 10, 28, 9, 30).toISOString(), now)).toBe('09:30')
+  expect(formatChatTime(local(2026, 10, 27, 23, 10).toISOString(), now)).toBe('Вчера')
+  expect(formatChatTime(local(2026, 8, 10, 10, 0).toISOString(), now)).toBe('10.08')
 })
 
 test('deadline today is rendered with local time', () => {
-  const now = new Date('2026-10-28T09:00:00+03:00')
-  expect(formatDeadline('2026-10-28T15:00:00Z', now)).toBe('сегодня, 18:00')
+  const local = (y: number, m: number, d: number, h: number, min = 0) =>
+    new Date(y, m - 1, d, h, min)
+  const now = local(2026, 10, 28, 9, 0)
+  expect(formatDeadline(local(2026, 10, 28, 15, 0).toISOString(), now)).toBe('сегодня, 15:00')
 
-  const tomorrow = new Date('2026-10-29T09:00:00+03:00')
-  expect(formatDeadline('2026-10-30T06:00:00Z', tomorrow)).toBe('завтра, 09:00')
-  expect(formatDeadline('2026-12-01T10:00:00Z', now)).toBe('1 дек')
-  expect(formatShortDate('2026-12-01T10:00:00Z')).toBe('1 дек')
+  const tomorrow = local(2026, 10, 29, 9, 0)
+  expect(formatDeadline(local(2026, 10, 30, 9, 0).toISOString(), tomorrow)).toBe('завтра, 09:00')
+  expect(formatDeadline(local(2026, 12, 1, 10, 0).toISOString(), now)).toBe('1 дек')
+  expect(formatShortDate(local(2026, 12, 1, 10, 0).toISOString())).toBe('1 дек')
 })
