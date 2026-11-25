@@ -56,7 +56,22 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Check migration drift
-        run: uv run alembic check
+        run: |
+          set -o pipefail
+          uv run alembic check 2>&1 | tee /tmp/alembic-check.log
+
+      - name: Annotate migration drift
+        if: failure()
+        run: |
+          if [ -f /tmp/alembic-check.log ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('/tmp/alembic-check.log').read_text(errors='replace')[-20000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=Alembic drift::{text}')
+          PY
+          fi
 
       - name: Lint
         run: uv run ruff check .
@@ -166,6 +181,19 @@ jobs:
           pkill -f 'uvicorn main:app' || true
           if [ -f /tmp/backend.pid ]; then
             kill "$(cat /tmp/backend.pid)" 2>/dev/null || true
+          fi
+
+      - name: Annotate backend log
+        if: failure()
+        run: |
+          if [ -f /tmp/backend.log ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('/tmp/backend.log').read_text(errors='replace')[-20000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=E2E backend log::{text}')
+          PY
           fi
 
       - name: Upload backend log on failure
