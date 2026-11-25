@@ -1,6 +1,6 @@
 [project]
 name = "gisorders"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.17.2",
