@@ -160,6 +160,14 @@ jobs:
         working-directory: frontend
         run: npx playwright test
 
+      - name: Stop backend
+        if: always()
+        run: |
+          pkill -f 'uvicorn main:app' || true
+          if [ -f /tmp/backend.pid ]; then
+            kill "$(cat /tmp/backend.pid)" 2>/dev/null || true
+          fi
+
       - name: Upload backend log on failure
         if: failure()
         uses: actions/upload-artifact@v4
