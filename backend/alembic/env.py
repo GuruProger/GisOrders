@@ -64,6 +64,10 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    # The postgis image adds the tiger/topology extension schemas to the
+    # database search_path. Their tables are not part of our models, so hide
+    # them from autogenerate and keep the comparison on the application schema.
+    connection.exec_driver_sql("SET search_path TO public")
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
